@@ -170,6 +170,7 @@ function renderResults(data) {
                     <span class="prob-bar" style="width: ${sp.probability * 100}px"></span>
                     ${(sp.probability * 100).toFixed(1)}%
                 </td>
+                <td>${sp.recently_observed ? "Yes" : ""}</td>
             </tr>
         `).join("");
 
@@ -187,7 +188,7 @@ function renderResults(data) {
                         Cumulative expected: ${h.cumulative_expected.toFixed(2)} lifers
                     </div>
                     <table>
-                        <thead><tr><th>Species</th><th>Detection Probability</th></tr></thead>
+                        <thead><tr><th>Species</th><th>Detection Probability</th><th>Recently Observed</th></tr></thead>
                         <tbody>${speciesRows}</tbody>
                     </table>
                 </div>
