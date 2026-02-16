@@ -26,11 +26,14 @@ document.getElementById("csv-input").addEventListener("change", e => {
     const file = e.target.files[0];
     if (!file) return;
 
+    const status = document.getElementById("file-status");
+    status.textContent = "Processing eBird data...";
+    status.className = "file-status";
+
     const reader = new FileReader();
     reader.onload = ev => {
         const text = ev.target.result;
         lifeList = parseLifeList(text);
-        const status = document.getElementById("file-status");
         status.textContent = `${lifeList.length} species on your life list`;
         status.className = "file-status loaded";
         document.getElementById("optimize-btn").disabled = false;
