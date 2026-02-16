@@ -1,20 +1,23 @@
 import duckdb as dk
 
 con = dk.connect('data/vermont.duckdb')
+con.execute("PRAGMA enable_print_progress_bar;")
+con.execute("PRAGMA progress_bar_time=500;")  # show after 500ms instead of 2s
+
 
 # read raw data into duckdb
+print("Reading eBird data into duckdb...")
 con.execute("""--sql
 DROP TABLE IF EXISTS sightings_raw;
 
 CREATE TABLE sightings_raw AS
 SELECT * 
-FROM read_csv_auto('data/ebd_US-VT_smp_relJul-2025.txt',
+FROM read_csv_auto('data/ebd_US-VT_smp_relDec-2025.txt',
     delim='\t', sample_size=-1)
 ;
 """)
-print("Done reading raw data into duckdb")
 print("Read {} rows".format(con.execute("SELECT COUNT(*) FROM sightings_raw").fetchone()[0]))
-
+print("\nStaging data for frequency calculations...")
 # rename columns for easier querying
 # keep only complete checklists from hotspot locations
 con.execute("""--sql
@@ -55,8 +58,8 @@ WHERE locality_type == 'H' AND
     all_species_reported IS TRUE
 ;
 """)
-print("Done staging")
 
+print("\nDeduplicating observations...")
 # drop duplicate observations from group checklists
 con.execute("""--sql
 DROP TABLE IF EXISTS sightings_clean;
@@ -74,6 +77,7 @@ WHERE group_id IS NULL or row_num = 1
 ;
 """)
 
+print("\nFiltering out one-off vagrants...")
 # count number of year each species was observed in each hotspot to identify one-off vagrants
 con.execute("""--sql
 DROP TABLE IF EXISTS hotspot_vagrants;
@@ -97,10 +101,11 @@ FROM sightings_clean s
 JOIN hotspot_vagrants h
     ON s.locality_id = h.locality_id
     AND s.common_name = h.common_name
-    WHERE h.years_observed > 1
+    WHERE h.years_observed > 2 -- only keep species observed at a hotspot in more than 2 years - eliminates one-off vagrants
 ;
 """)
 
+print("\nCalculating checklist and detection counts...")
 # group checklists and sighting counts by locality, date, and species
 con.execute("""--sql
 DROP TABLE IF EXISTS detection_frequencies;
@@ -144,6 +149,7 @@ ORDER BY c.locality_id, c.day_of_year DESC
 ;
 """)
 
+print("\nCalculating frequencies...")
 # calculate rolling average observations, checklists, frequency, and wilson lower bound CI 
 con.execute("""--sql
 DROP TABLE IF EXISTS rolling_avg_freq;
