@@ -34,7 +34,7 @@ def fetch_recent_species(locality_id: int) -> set[str]:
 
     Returns a set of common names.
     """
-    url = f"https://api.ebird.org/v2/data/obs/L{locality_id}/recent"
+    url = f"https://api.ebird.org/v2/data/obs/L{locality_id}/recent?back=30"
     req = Request(url, headers={"X-eBirdApiToken": EBIRD_API_KEY})
     try:
         with urlopen(req, timeout=10) as resp:
