@@ -160,7 +160,7 @@ function renderResults(data) {
     `;
 
     data.hotspots.forEach(h => {
-        const speciesRows = h.target_species.filter(sp => sp.probability >= 0.001).slice(0, 25).map(sp => `
+        const speciesRows = h.target_species.slice(0, 25).map(sp => `
             <tr>
                 <td>${sp.common_name}</td>
                 <td>

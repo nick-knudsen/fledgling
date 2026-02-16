@@ -248,7 +248,7 @@ def optimize_hotspots(
         species_probs = []
         for s_idx, sp_name in enumerate(species_list):
             p = prob_matrix[mat_idx, s_idx]
-            if p > 0:
+            if p >= 0.001:
                 species_probs.append(SpeciesProb(sp_name, float(p)))
         species_probs.sort(key=lambda x: x.probability, reverse=True)
 
@@ -268,7 +268,7 @@ def optimize_hotspots(
     combined_probs = []
     for s_idx, sp_name in enumerate(species_list):
         combined_p = 1.0 - final_miss_probs[s_idx]
-        if combined_p > 0:
+        if combined_p >= 0.001:
             combined_probs.append(SpeciesProb(sp_name, combined_p))
     combined_probs.sort(key=lambda x: x.probability, reverse=True)
 
@@ -276,7 +276,7 @@ def optimize_hotspots(
         selected_hotspots=hotspots,
         total_expected_lifers=cumulative,
         num_candidate_hotspots=len(hotspot_info),
-        num_potential_lifers=len(species_list),
+        num_potential_lifers=len(combined_probs),
         date_range=(start_date, end_date),
         geographic_filter=geo_description,
         species_combined_probs=combined_probs,
