@@ -1,5 +1,48 @@
+// Theme: browser/system preference is primary, manual toggle overrides until page reload
+function getSystemTheme() {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    updateMapTiles();
+}
+
 let lifeList = [];
+let allObservations = []; // {name, sci, state, county, countryCode}
+let regionNames = {}; // code -> display name, loaded from API
 let map = null;
+let tileLayer = null;
+
+applyTheme(getSystemTheme());
+
+// Listen for system/browser preference changes (e.g. time-based auto switch)
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    applyTheme(getSystemTheme());
+});
+
+// Manual toggle overrides system preference
+document.getElementById("theme-toggle").addEventListener("click", () => {
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    applyTheme(isDark ? "light" : "dark");
+});
+
+const tileSets = {
+    light: {
+        url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attribution: '&copy; OpenStreetMap contributors',
+    },
+    dark: {
+        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    },
+};
+
+function updateMapTiles() {
+    if (!map || !tileLayer) return;
+    const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    tileLayer.setUrl(tileSets[theme].url);
+}
 
 // Set default dates to today + 7 days
 const today = new Date();
@@ -8,7 +51,11 @@ nextWeek.setDate(today.getDate() + 7);
 document.getElementById("start-date").value = today.toISOString().split("T")[0];
 document.getElementById("end-date").value = nextWeek.toISOString().split("T")[0];
 
-// Load counties
+// Load reference data
+fetch("/api/region-names")
+    .then(r => r.json())
+    .then(data => { regionNames = data; });
+
 fetch("/api/counties")
     .then(r => r.json())
     .then(counties => {
@@ -33,29 +80,38 @@ document.getElementById("csv-input").addEventListener("change", e => {
     const reader = new FileReader();
     reader.onload = ev => {
         const text = ev.target.result;
-        lifeList = parseLifeList(text);
-        status.textContent = `${lifeList.length} species on your life list`;
-        status.className = "file-status loaded";
+        allObservations = parseObservations(text);
+        populateCountryDropdown();
+        resetScopeDropdowns("state");
+        resetScopeDropdowns("county");
+        updateLifeList();
         document.getElementById("optimize-btn").disabled = false;
     };
     reader.readAsText(file);
 });
 
-function parseLifeList(csvText) {
+function parseObservations(csvText) {
     const lines = csvText.split("\n");
     if (lines.length < 2) return [];
 
     const header = parseCSVLine(lines[0]);
     const nameIdx = header.indexOf("Common Name");
     const sciIdx = header.indexOf("Scientific Name");
+    const countIdx = header.indexOf("Count");
+    const stateIdx = header.indexOf("State/Province");
+    const countyIdx = header.indexOf("County");
     if (nameIdx === -1) return [];
 
-    const seen = new Set();
+    const observations = [];
     for (let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
         const cols = parseCSVLine(lines[i]);
         let name = cols[nameIdx] || "";
         const sci = cols[sciIdx] || "";
+        const count = cols[countIdx] || "";
+
+        // Skip zero-count entries (species reported as absent)
+        if (count === "0") continue;
 
         // Strip subspecies parenthetical
         const parenIdx = name.indexOf(" (");
@@ -64,9 +120,134 @@ function parseLifeList(csvText) {
         // Skip hybrids and sp. groups
         if (name.includes("/") || name.includes(" sp.") || sci.includes(" x ")) continue;
 
-        if (name) seen.add(name);
+        const stateCode = cols[stateIdx] || "";
+        const countryCode = stateCode.includes("-") ? stateCode.split("-")[0] : "";
+
+        if (name) {
+            observations.push({
+                name,
+                sci,
+                countryCode,
+                state: stateCode,
+                county: cols[countyIdx] || "",
+            });
+        }
     }
-    return Array.from(seen);
+    return observations;
+}
+
+function regionName(code) {
+    return regionNames[code] || code;
+}
+
+function resetScopeDropdowns(level) {
+    if (level === "state" || level === "country") {
+        const stateSel = document.getElementById("scope-state");
+        stateSel.innerHTML = '<option value="">All states/provinces</option>';
+        stateSel.disabled = true;
+    }
+    if (level === "state" || level === "country" || level === "county") {
+        const countySel = document.getElementById("scope-county");
+        countySel.innerHTML = '<option value="">All counties</option>';
+        countySel.disabled = true;
+    }
+}
+
+function populateCountryDropdown() {
+    const sel = document.getElementById("scope-country");
+    sel.innerHTML = '<option value="">World (all countries)</option>';
+
+    const countries = new Set();
+    for (const obs of allObservations) {
+        if (obs.countryCode) countries.add(obs.countryCode);
+    }
+
+    for (const code of [...countries].sort((a, b) => regionName(a).localeCompare(regionName(b)))) {
+        const opt = document.createElement("option");
+        opt.value = code;
+        opt.textContent = regionName(code);
+        sel.appendChild(opt);
+    }
+    sel.disabled = false;
+}
+
+document.getElementById("scope-country").addEventListener("change", () => {
+    resetScopeDropdowns("state");
+    const country = document.getElementById("scope-country").value;
+
+    if (country) {
+        const stateSel = document.getElementById("scope-state");
+        const states = new Set();
+        for (const obs of allObservations) {
+            if (obs.countryCode === country && obs.state) states.add(obs.state);
+        }
+        for (const code of [...states].sort((a, b) => regionName(a).localeCompare(regionName(b)))) {
+            const opt = document.createElement("option");
+            opt.value = code;
+            opt.textContent = regionName(code);
+            stateSel.appendChild(opt);
+        }
+        stateSel.disabled = states.size === 0;
+    }
+
+    updateLifeList();
+});
+
+document.getElementById("scope-state").addEventListener("change", () => {
+    resetScopeDropdowns("county");
+    const state = document.getElementById("scope-state").value;
+
+    if (state) {
+        const countySel = document.getElementById("scope-county");
+        const counties = new Set();
+        for (const obs of allObservations) {
+            if (obs.state === state && obs.county) counties.add(obs.county);
+        }
+        for (const c of [...counties].sort()) {
+            const opt = document.createElement("option");
+            opt.value = c;
+            opt.textContent = c;
+            countySel.appendChild(opt);
+        }
+        countySel.disabled = counties.size === 0;
+    }
+
+    updateLifeList();
+});
+
+document.getElementById("scope-county").addEventListener("change", () => {
+    updateLifeList();
+});
+
+function updateLifeList() {
+    const country = document.getElementById("scope-country").value;
+    const state = document.getElementById("scope-state").value;
+    const county = document.getElementById("scope-county").value;
+
+    let filtered = allObservations;
+    if (county) {
+        filtered = filtered.filter(o => o.county === county && o.state === state);
+    } else if (state) {
+        filtered = filtered.filter(o => o.state === state);
+    } else if (country) {
+        filtered = filtered.filter(o => o.countryCode === country);
+    }
+
+    const seen = new Set();
+    for (const obs of filtered) seen.add(obs.name);
+    lifeList = Array.from(seen);
+
+    // Build scope label
+    let label = "World";
+    if (county) label = county;
+    else if (state) label = regionName(state);
+    else if (country) label = regionName(country);
+
+    console.log(`Life list [${label}]: ${lifeList.length} species`, {country, state, county, observations: filtered.length, species: lifeList});
+
+    const status = document.getElementById("file-status");
+    status.textContent = `${lifeList.length} species on your ${label} life list`;
+    status.className = "file-status loaded";
 }
 
 function parseCSVLine(line) {
@@ -185,7 +366,8 @@ function renderResults(data) {
                     <div class="hotspot-meta">
                         ${h.county} &middot;
                         ${h.latitude.toFixed(4)}, ${h.longitude.toFixed(4)} &middot;
-                        Cumulative expected: ${h.cumulative_expected.toFixed(2)} lifers
+                        <a href="https://ebird.org/hotspot/L${h.locality_id}" target="_blank" rel="noopener">View on eBird</a> &middot;
+                        <a href="https://www.google.com/maps/search/${encodeURIComponent(h.locality)}/@${h.latitude},${h.longitude},15z" target="_blank" rel="noopener">View on Google Maps</a>
                     </div>
                     <table>
                         <thead><tr><th>Species</th><th>Detection Probability</th><th>Observed in Last 30 Days?</th></tr></thead>
@@ -227,9 +409,9 @@ function renderResults(data) {
     if (map) { map.remove(); map = null; }
 
     map = L.map("map");
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
+    const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    const tiles = tileSets[theme];
+    tileLayer = L.tileLayer(tiles.url, { attribution: tiles.attribution }).addTo(map);
 
     const bounds = [];
     data.hotspots.forEach(h => {

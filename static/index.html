@@ -4,14 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Listr - Hotspot Optimizer</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
     <header>
-        <h1>Listr</h1>
-        <p>Find the best birding hotspots to maximize your life birds</p>
+        <div>
+            <h1>Listr</h1>
+            <p>Find the best birding hotspots to maximize your life birds</p>
+        </div>
     </header>
+
+    <div class="theme-switch" id="theme-toggle" title="Toggle dark mode">
+        <span class="theme-switch-icon light">&#9788;</span>
+        <span class="theme-switch-knob"></span>
+        <span class="theme-switch-icon dark">&#9790;</span>
+    </div>
 
     <div class="layout">
         <aside class="sidebar">
@@ -22,7 +31,20 @@
             </div>
 
             <div class="form-group">
-                <label>County</label>
+                <label>Life List Scope</label>
+                <select id="scope-country" disabled>
+                    <option value="">World (all countries)</option>
+                </select>
+                <select id="scope-state" disabled style="margin-top: 0.4rem;">
+                    <option value="">All states/provinces</option>
+                </select>
+                <select id="scope-county" disabled style="margin-top: 0.4rem;">
+                    <option value="">All counties</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Search Area</label>
                 <select id="county-select">
                     <option value="">All counties</option>
                 </select>

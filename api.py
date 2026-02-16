@@ -1,6 +1,8 @@
+import csv
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+from pathlib import Path
 from urllib.request import Request, urlopen
 import json
 
@@ -57,6 +59,20 @@ def add_recent_observations(hotspots: list[dict]) -> list[dict]:
             sp["recently_observed"] = sp["common_name"] in recent
 
     return hotspots
+
+
+@app.get("/api/region-names")
+def get_region_names():
+    """Return a mapping of eBird region codes to display names."""
+    lookup = {}
+    with open(Path("data/subnational1.csv"), newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            code = row["country_code"]
+            lookup[code] = row["country_name"]
+            sub_code = row["subnational1_code"]
+            if sub_code and sub_code != f"{code}-":
+                lookup[sub_code] = row["subnational1_name"]
+    return lookup
 
 
 @app.get("/api/counties")

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Location pin outline -->
+  <path d="M32 4C20.954 4 12 12.954 12 24c0 14 20 36 20 36s20-22 20-36C52 12.954 43.046 4 32 4z" fill="#1a73e8" stroke="#1a73e8" stroke-width="3" stroke-linejoin="round"/>
+  <!-- Simple bird in flight (like a checkmark / seagull shape) -->
+  <path d="M20 24 Q26 16 32 22 Q38 16 44 24" fill="none" stroke="white" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
