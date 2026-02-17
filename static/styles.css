@@ -90,6 +90,36 @@ html[data-theme="dark"] .theme-switch-knob { left: 31px; }
 .date-row > div { flex: 1; min-width: 0; }
 .date-row input[type="date"] { padding: 0.5rem 0.4rem; }
 
+.multi-select {
+    position: relative;
+}
+.multi-select-display {
+    width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--input-border);
+    border-radius: 6px; font-size: 0.9rem; background: var(--input-bg); color: var(--text);
+    cursor: pointer; user-select: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.multi-select-display:hover { border-color: var(--accent); }
+.multi-select-dropdown {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--bg-surface); border: 1px solid var(--input-border);
+    border-radius: 6px; margin-top: 2px; max-height: 12rem; overflow-y: auto;
+    z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.multi-select-dropdown.open { display: block; }
+.multi-select-item {
+    padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.multi-select-item:hover { background: var(--hover); }
+.multi-select-item .check {
+    color: var(--accent); font-size: 0.9rem; visibility: hidden;
+}
+.multi-select-item.selected .check {
+    visibility: visible;
+}
+.form-hint { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; }
+
 .file-status {
     font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;
 }
@@ -114,6 +144,14 @@ button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
 .metric-card .label { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem; }
 
 #map { height: 350px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1.5rem; }
+.map-marker { background: none; border: none; }
+.map-marker-inner {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: #fff; border: 2px solid #fff;
+    font-size: 0.8rem; font-weight: 700; font-family: system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
 
 .hotspot-card {
     background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;

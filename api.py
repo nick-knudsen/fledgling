@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from hotspot_optimizer import optimize_hotspots
 
-DB_PATH = "data/vermont.duckdb"
+DB_PATH = "data/arizona.duckdb"
 
 with open("secrets.toml", "rb") as f:
     secrets = tomllib.load(f)
@@ -27,7 +27,7 @@ class OptimizeRequest(BaseModel):
     start_date: date
     end_date: date
     k: int = 5
-    county: str | None = None
+    counties: list[str] | None = None
     state: str | None = None
 
 
@@ -101,7 +101,7 @@ def run_optimization(req: OptimizeRequest):
         start_date=req.start_date,
         end_date=req.end_date,
         k=req.k,
-        county=req.county,
+        counties=req.counties,
         state=req.state,
     )
 

@@ -55,7 +55,7 @@ def load_probability_matrix(
     con: duckdb.DuckDBPyConnection,
     days_of_year: list[int],
     life_list_names: list[str],
-    county: Optional[str] = None,
+    counties: Optional[list[str]] = None,
     state: Optional[str] = None,
 ) -> tuple[pd.DataFrame, np.ndarray, list[str]]:
     """Load and prepare the probability matrix from the database.
@@ -74,8 +74,9 @@ def load_probability_matrix(
     day_list = ", ".join(str(d) for d in days_of_year)
 
     geo_filter = "1=1"
-    if county:
-        geo_filter = f"h.county = '{county}'"
+    if counties:
+        county_list = ", ".join(f"'{c}'" for c in counties)
+        geo_filter = f"h.county IN ({county_list})"
     elif state:
         geo_filter = f"h.state = '{state}'"
 
@@ -191,7 +192,7 @@ def optimize_hotspots(
     start_date: date,
     end_date: date,
     k: int = 5,
-    county: Optional[str] = None,
+    counties: Optional[list[str]] = None,
     state: Optional[str] = None,
 ) -> OptimizationResult:
     """Main entry point for the hotspot optimizer.
@@ -202,7 +203,7 @@ def optimize_hotspots(
         start_date: Start of date range (inclusive).
         end_date: End of date range (inclusive).
         k: Number of hotspots to select.
-        county: Filter to this county name.
+        counties: Filter to these county names.
         state: Filter to this state name.
 
     Returns:
@@ -211,8 +212,8 @@ def optimize_hotspots(
     days_of_year = date_range_to_days_of_year(start_date, end_date)
 
     geo_parts = []
-    if county:
-        geo_parts.append(county)
+    if counties:
+        geo_parts.append(", ".join(counties))
     if state:
         geo_parts.append(state)
     geo_description = ", ".join(geo_parts) if geo_parts else "All areas"
@@ -220,7 +221,7 @@ def optimize_hotspots(
     con = duckdb.connect(db_path, read_only=True)
     try:
         hotspot_info, prob_matrix, species_list = load_probability_matrix(
-            con, days_of_year, life_list_names, county=county, state=state,
+            con, days_of_year, life_list_names, counties=counties, state=state,
         )
     finally:
         con.close()

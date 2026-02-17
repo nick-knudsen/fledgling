@@ -56,17 +56,51 @@ fetch("/api/region-names")
     .then(r => r.json())
     .then(data => { regionNames = data; });
 
+let selectedCounties = new Set();
+
 fetch("/api/counties")
     .then(r => r.json())
     .then(counties => {
-        const sel = document.getElementById("county-select");
+        const dropdown = document.getElementById("county-dropdown");
         counties.forEach(c => {
-            const opt = document.createElement("option");
-            opt.value = c;
-            opt.textContent = c;
-            sel.appendChild(opt);
+            const item = document.createElement("div");
+            item.className = "multi-select-item";
+            item.dataset.value = c;
+            item.innerHTML = `<span>${c}</span><span class="check">✓</span>`;
+            item.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (selectedCounties.has(c)) {
+                    selectedCounties.delete(c);
+                    item.classList.remove("selected");
+                } else {
+                    selectedCounties.add(c);
+                    item.classList.add("selected");
+                }
+                updateCountyDisplay();
+            });
+            dropdown.appendChild(item);
         });
     });
+
+document.getElementById("county-display").addEventListener("click", () => {
+    document.getElementById("county-dropdown").classList.toggle("open");
+});
+
+document.addEventListener("click", (e) => {
+    const select = document.getElementById("county-select");
+    if (!select.contains(e.target)) {
+        document.getElementById("county-dropdown").classList.remove("open");
+    }
+});
+
+function updateCountyDisplay() {
+    const display = document.getElementById("county-display");
+    if (selectedCounties.size === 0) {
+        display.textContent = "All counties";
+    } else {
+        display.textContent = Array.from(selectedCounties).join(", ");
+    }
+}
 
 // Parse CSV client-side
 document.getElementById("csv-input").addEventListener("change", e => {
@@ -286,13 +320,13 @@ document.getElementById("optimize-btn").addEventListener("click", async () => {
     btn.disabled = true;
     btn.textContent = "Optimizing...";
 
-    const county = document.getElementById("county-select").value || null;
+    const counties = Array.from(selectedCounties);
     const body = {
         life_list: lifeList,
         start_date: document.getElementById("start-date").value,
         end_date: document.getElementById("end-date").value,
         k: parseInt(document.getElementById("k-input").value),
-        county: county,
+        counties: counties.length > 0 ? counties : null,
     };
 
     try {
@@ -415,7 +449,14 @@ function renderResults(data) {
 
     const bounds = [];
     data.hotspots.forEach(h => {
-        const marker = L.marker([h.latitude, h.longitude]).addTo(map);
+        const icon = L.divIcon({
+            className: "map-marker",
+            html: `<div class="map-marker-inner">${h.rank}</div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+            popupAnchor: [0, -16],
+        });
+        const marker = L.marker([h.latitude, h.longitude], { icon }).addTo(map);
         marker.bindPopup(
             `<b>#${h.rank}: ${h.locality}</b><br>${h.county}<br>+${h.marginal_gain.toFixed(2)} expected lifers`
         );

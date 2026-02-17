@@ -1,6 +1,6 @@
 import duckdb as dk
 
-con = dk.connect('data/vermont.duckdb')
+con = dk.connect('data/arizona.duckdb')
 con.execute("PRAGMA enable_print_progress_bar;")
 con.execute("PRAGMA progress_bar_time=500;")  # show after 500ms instead of 2s
 
@@ -12,7 +12,7 @@ DROP TABLE IF EXISTS sightings_raw;
 
 CREATE TABLE sightings_raw AS
 SELECT * 
-FROM read_csv_auto('data/ebd_US-VT_smp_relDec-2025.txt',
+FROM read_csv_auto('data/ebd_US-AZ_smp_relDec-2025.txt',
     delim='\t', sample_size=-1)
 ;
 """)
