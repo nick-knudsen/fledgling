@@ -71,7 +71,7 @@ html[data-theme="dark"] .theme-switch-knob { left: 31px; }
 .layout { display: flex; min-height: calc(100vh - 80px); }
 
 .sidebar {
-    width: 320px; min-width: 320px; background: var(--bg-surface);
+    width: 340px; min-width: 340px; background: var(--bg-surface);
     border-right: 1px solid var(--border); padding: 1.5rem;
     display: flex; flex-direction: column; gap: 1.25rem;
 }
@@ -85,19 +85,34 @@ html[data-theme="dark"] .theme-switch-knob { left: 31px; }
     width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--input-border);
     border-radius: 6px; font-size: 0.9rem; background: var(--input-bg); color: var(--text);
 }
+.form-group select {
+    appearance: none;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+}
+.form-group select:not(:disabled) { cursor: pointer; }
+.form-group select:not(:disabled):hover { border-color: var(--accent); }
 .form-group input[type="file"] { padding: 0.4rem; }
 .date-row { display: flex; gap: 0.75rem; }
 .date-row > div { flex: 1; min-width: 0; }
-.date-row input[type="date"] { padding: 0.5rem 0.4rem; }
+.date-selects { display: flex; gap: 0.35rem; }
+.date-selects select:first-child { flex: 1.4; }
+.date-selects select:last-child { flex: 1; }
 
 .multi-select {
     position: relative;
 }
 .multi-select-display {
-    width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--input-border);
+    width: 100%; padding: 0.5rem 0.75rem; padding-right: 2rem; border: 1px solid var(--input-border);
     border-radius: 6px; font-size: 0.9rem; background: var(--input-bg); color: var(--text);
     cursor: pointer; user-select: none;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
 }
 .multi-select-display:hover { border-color: var(--accent); }
 .multi-select-dropdown {

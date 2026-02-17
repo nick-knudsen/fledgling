@@ -45,12 +45,52 @@ function updateMapTiles() {
     tileLayer.setUrl(tileSets[theme].url);
 }
 
-// Set default dates to today + 7 days
+// Month/day date selects
+const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function populateDateSelects(prefix, month, day) {
+    const monthSel = document.getElementById(`${prefix}-month`);
+    const daySel = document.getElementById(`${prefix}-day`);
+
+    monthNames.forEach((name, i) => {
+        const opt = document.createElement("option");
+        opt.value = i + 1;
+        opt.textContent = name;
+        monthSel.appendChild(opt);
+    });
+    monthSel.value = month;
+
+    function updateDays() {
+        const m = parseInt(monthSel.value);
+        const maxDay = daysInMonth[m - 1];
+        const curDay = parseInt(daySel.value) || day;
+        daySel.innerHTML = "";
+        for (let d = 1; d <= maxDay; d++) {
+            const opt = document.createElement("option");
+            opt.value = d;
+            opt.textContent = d;
+            daySel.appendChild(opt);
+        }
+        daySel.value = Math.min(curDay, maxDay);
+    }
+
+    monthSel.addEventListener("change", updateDays);
+    updateDays();
+}
+
 const today = new Date();
 const nextWeek = new Date(today);
 nextWeek.setDate(today.getDate() + 7);
-document.getElementById("start-date").value = today.toISOString().split("T")[0];
-document.getElementById("end-date").value = nextWeek.toISOString().split("T")[0];
+populateDateSelects("start", today.getMonth() + 1, today.getDate());
+populateDateSelects("end", nextWeek.getMonth() + 1, nextWeek.getDate());
+
+function getDateValue(prefix) {
+    const m = document.getElementById(`${prefix}-month`).value;
+    const d = document.getElementById(`${prefix}-day`).value;
+    // Use 2024 (leap year) so Feb 29 is valid
+    return `2024-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
 
 // Load reference data
 fetch("/api/region-names")
@@ -421,8 +461,8 @@ document.getElementById("optimize-btn").addEventListener("click", async () => {
     const countries = Array.from(selectedCountries);
     const body = {
         life_list: lifeList,
-        start_date: document.getElementById("start-date").value,
-        end_date: document.getElementById("end-date").value,
+        start_date: getDateValue("start"),
+        end_date: getDateValue("end"),
         k: parseInt(document.getElementById("k-input").value),
         counties: counties.length > 0 ? counties : null,
         states: counties.length === 0 && states.length > 0 ? states : null,
