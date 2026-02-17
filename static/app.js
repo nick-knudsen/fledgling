@@ -413,8 +413,6 @@ function updateLifeList() {
     else if (state) label = regionName(state);
     else if (country) label = regionName(country);
 
-    console.log(`Life list [${label}]: ${lifeList.length} species`, {country, state, county, observations: filtered.length, species: lifeList});
-
     const status = document.getElementById("file-status");
     status.textContent = `${lifeList.length} species on your ${label} life list`;
     status.className = "file-status loaded";
