@@ -13,6 +13,7 @@ let allObservations = []; // {name, sci, state, county, countryCode}
 let regionNames = {}; // code -> display name, loaded from API
 let map = null;
 let tileLayer = null;
+let markers = {}; // rank -> L.marker
 
 applyTheme(getSystemTheme());
 
@@ -62,6 +63,29 @@ fetch("/api/counties")
     .then(r => r.json())
     .then(counties => {
         const dropdown = document.getElementById("county-dropdown");
+
+        const actions = document.createElement("div");
+        actions.className = "multi-select-actions";
+        actions.innerHTML = `<button id="county-select-all">Select all</button><button id="county-select-none">Select none</button>`;
+        dropdown.appendChild(actions);
+
+        actions.querySelector("#county-select-all").addEventListener("click", (e) => {
+            e.stopPropagation();
+            dropdown.querySelectorAll(".multi-select-item").forEach(item => {
+                selectedCounties.add(item.dataset.value);
+                item.classList.add("selected");
+            });
+            updateCountyDisplay();
+        });
+        actions.querySelector("#county-select-none").addEventListener("click", (e) => {
+            e.stopPropagation();
+            selectedCounties.clear();
+            dropdown.querySelectorAll(".multi-select-item").forEach(item => {
+                item.classList.remove("selected");
+            });
+            updateCountyDisplay();
+        });
+
         counties.forEach(c => {
             const item = document.createElement("div");
             item.className = "multi-select-item";
@@ -370,7 +394,7 @@ function renderResults(data) {
             </div>
             <div class="metric-card">
                 <div class="value">${data.num_potential_lifers}</div>
-                <div class="label">Potential lifer species</div>
+                <div class="label">Potential lifers</div>
             </div>
         </div>
         <div id="map"></div>
@@ -390,9 +414,9 @@ function renderResults(data) {
         `).join("");
 
         html += `
-            <div class="hotspot-card">
-                <div class="hotspot-header" onclick="this.nextElementSibling.classList.toggle('open')">
-                    <span class="rank">#${h.rank}</span>
+            <div class="hotspot-card" data-rank="${h.rank}">
+                <div class="hotspot-header">
+                    <span class="rank">${h.rank}</span>
                     <span class="name">${h.locality}</span>
                     <span class="gain">+${h.marginal_gain.toFixed(2)} lifers</span>
                 </div>
@@ -447,23 +471,56 @@ function renderResults(data) {
     const tiles = tileSets[theme];
     tileLayer = L.tileLayer(tiles.url, { attribution: tiles.attribution }).addTo(map);
 
+    markers = {};
     const bounds = [];
     data.hotspots.forEach(h => {
         const icon = L.divIcon({
             className: "map-marker",
-            html: `<div class="map-marker-inner">${h.rank}</div>`,
+            html: `<div class="map-marker-inner" data-rank="${h.rank}">${h.rank}</div>`,
             iconSize: [28, 28],
             iconAnchor: [14, 14],
-            popupAnchor: [0, -16],
         });
         const marker = L.marker([h.latitude, h.longitude], { icon }).addTo(map);
-        marker.bindPopup(
-            `<b>#${h.rank}: ${h.locality}</b><br>${h.county}<br>+${h.marginal_gain.toFixed(2)} expected lifers`
-        );
+        markers[h.rank] = marker;
+
+        marker.on("mouseover", () => highlightHotspot(h.rank, true));
+        marker.on("mouseout", () => highlightHotspot(h.rank, false));
+        marker.on("click", () => toggleHotspotBody(h.rank));
+
         bounds.push([h.latitude, h.longitude]);
     });
 
     if (bounds.length > 0) {
         map.fitBounds(bounds, { padding: [30, 30] });
     }
+
+    // Wire up hotspot card hover and click
+    document.querySelectorAll(".hotspot-card[data-rank]").forEach(card => {
+        const rank = parseInt(card.dataset.rank);
+        const header = card.querySelector(".hotspot-header");
+
+        header.addEventListener("click", () => toggleHotspotBody(rank));
+        card.addEventListener("mouseenter", () => highlightHotspot(rank, true));
+        card.addEventListener("mouseleave", () => highlightHotspot(rank, false));
+    });
+}
+
+function highlightHotspot(rank, on) {
+    // Highlight map marker via DOM query
+    const inner = document.querySelector(`.map-marker-inner[data-rank="${rank}"]`);
+    if (inner) inner.classList.toggle("highlight", on);
+
+    // Highlight hotspot card
+    const card = document.querySelector(`.hotspot-card[data-rank="${rank}"]`);
+    if (card) card.classList.toggle("highlight", on);
+}
+
+function toggleHotspotBody(rank) {
+    const card = document.querySelector(`.hotspot-card[data-rank="${rank}"]`);
+    if (!card) return;
+    const body = card.querySelector(".hotspot-body");
+    if (body) body.classList.toggle("open");
+
+    // Scroll card into view if triggered from map
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }

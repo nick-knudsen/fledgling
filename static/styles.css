@@ -45,7 +45,7 @@ header {
     background: var(--bg-surface); border-bottom: 1px solid var(--border);
     padding: 1.5rem 2rem; display: flex; justify-content: space-between; align-items: center;
 }
-header div { }
+
 header h1 { font-size: 1.5rem; font-weight: 600; }
 header p { color: var(--text-secondary); margin-top: 0.25rem; font-size: 0.9rem; }
 
@@ -115,9 +115,20 @@ html[data-theme="dark"] .theme-switch-knob { left: 31px; }
 .multi-select-item .check {
     color: var(--accent); font-size: 0.9rem; visibility: hidden;
 }
+.multi-select-item.selected { background: rgba(26, 115, 232, 0.08); }
+html[data-theme="dark"] .multi-select-item.selected { background: rgba(91, 156, 246, 0.12); }
 .multi-select-item.selected .check {
     visibility: visible;
 }
+.multi-select-actions {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border-light);
+    position: sticky; top: 0; background: var(--bg-surface); z-index: 1;
+}
+.multi-select-actions button {
+    flex: 1; padding: 0.35rem; font-size: 0.75rem; cursor: pointer;
+    background: none; border: none; color: var(--accent); font-weight: 500;
+}
+.multi-select-actions button:hover { background: var(--hover); }
 .form-hint { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; }
 
 .file-status {
@@ -151,11 +162,18 @@ button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
     font-size: 0.8rem; font-weight: 700; font-family: system-ui, sans-serif;
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    transition: transform 0.15s ease;
+}
+.map-marker-inner.highlight {
+    transform: scale(1.2);
 }
 
 .hotspot-card {
     background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;
-    margin-bottom: 1rem; overflow: hidden;
+    margin-bottom: 1rem; overflow: hidden; transition: border-color 0.15s ease;
+}
+.hotspot-card.highlight {
+    border-color: var(--accent);
 }
 .hotspot-header {
     padding: 1rem 1.25rem; cursor: pointer; display: flex;
