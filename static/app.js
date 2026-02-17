@@ -9,7 +9,8 @@ function applyTheme(theme) {
 }
 
 let lifeList = [];
-let allObservations = []; // {name, sci, state, county, countryCode}
+let allObservations = []; // {name, sci, state, county, countryCode, date}
+let listType = "life"; // "life" or "year"
 let regionNames = {}; // code -> display name, loaded from API
 let map = null;
 let tileLayer = null;
@@ -44,6 +45,16 @@ function updateMapTiles() {
     const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
     tileLayer.setUrl(tileSets[theme].url);
 }
+
+// List type toggle (life / year)
+document.querySelectorAll(".list-type-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll(".list-type-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        listType = btn.dataset.type;
+        if (allObservations.length > 0) updateLifeList();
+    });
+});
 
 // Month/day date selects
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -270,6 +281,7 @@ function parseObservations(csvText) {
     const countIdx = header.indexOf("Count");
     const stateIdx = header.indexOf("State/Province");
     const countyIdx = header.indexOf("County");
+    const dateIdx = header.indexOf("Date");
     if (nameIdx === -1) return [];
 
     const observations = [];
@@ -300,6 +312,7 @@ function parseObservations(csvText) {
                 countryCode,
                 state: stateCode,
                 county: cols[countyIdx] || "",
+                date: cols[dateIdx] || "",
             });
         }
     }
@@ -403,6 +416,11 @@ function updateLifeList() {
         filtered = filtered.filter(o => o.countryCode === country);
     }
 
+    if (listType === "year") {
+        const currentYear = String(new Date().getFullYear());
+        filtered = filtered.filter(o => o.date.startsWith(currentYear));
+    }
+
     const seen = new Set();
     for (const obs of filtered) seen.add(obs.name);
     lifeList = Array.from(seen);
@@ -413,8 +431,10 @@ function updateLifeList() {
     else if (state) label = regionName(state);
     else if (country) label = regionName(country);
 
+    const listLabel = listType === "year" ? "year list" : "life list";
+
     const status = document.getElementById("file-status");
-    status.textContent = `${lifeList.length} species on your ${label} life list`;
+    status.textContent = `${lifeList.length} species on your ${label} ${listLabel}`;
     status.className = "file-status loaded";
 }
 

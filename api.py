@@ -92,6 +92,32 @@ def get_search_areas():
         con.close()
 
 
+_taxonomy_cache: list[dict] | None = None
+
+
+@app.get("/api/species")
+def get_species():
+    """Return bird species from the eBird taxonomy (cached in memory)."""
+    global _taxonomy_cache
+    if _taxonomy_cache is None:
+        url = "https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&cat=species,issf,domestic,form"
+        req = Request(url, headers={"X-eBirdApiToken": EBIRD_API_KEY})
+        with urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+        _taxonomy_cache = [
+            {
+                "comName": sp["comName"],
+                "sciName": sp["sciName"],
+                "speciesCode": sp["speciesCode"],
+                "comNameCodes": sp.get("comNameCodes", []),
+                "sciNameCodes": sp.get("sciNameCodes", []),
+                "bandingCodes": sp.get("bandingCodes", []),
+            }
+            for sp in data
+        ]
+    return _taxonomy_cache
+
+
 @app.post("/api/optimize")
 def run_optimization(req: OptimizeRequest):
     """Run the hotspot optimization.

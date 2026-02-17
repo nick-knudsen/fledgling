@@ -17,9 +17,7 @@
     </header>
 
     <div class="theme-switch" id="theme-toggle" title="Toggle dark mode">
-        <span class="theme-switch-icon light">&#9788;</span>
         <span class="theme-switch-knob"></span>
-        <span class="theme-switch-icon dark">&#9790;</span>
     </div>
 
     <div class="layout">
@@ -31,7 +29,11 @@
             </div>
 
             <div class="form-group">
-                <label>Life List Scope</label>
+                <label>List Scope</label>
+                <div class="list-type-toggle">
+                    <button class="list-type-btn active" data-type="life">Life</button>
+                    <button class="list-type-btn" data-type="year">Year</button>
+                </div>
                 <select id="scope-country" disabled>
                     <option value="">World (all countries)</option>
                 </select>
