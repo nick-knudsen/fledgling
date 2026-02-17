@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from hotspot_optimizer import optimize_hotspots
 
-DB_PATH = "data/arizona.duckdb"
+DB_PATH = "data/combined.duckdb"
 
 with open("secrets.toml", "rb") as f:
     secrets = tomllib.load(f)
@@ -28,7 +28,8 @@ class OptimizeRequest(BaseModel):
     end_date: date
     k: int = 5
     counties: list[str] | None = None
-    state: str | None = None
+    states: list[str] | None = None
+    country: str | None = None
 
 
 def fetch_recent_species(locality_id: int) -> set[str]:
@@ -75,15 +76,18 @@ def get_region_names():
     return lookup
 
 
-@app.get("/api/counties")
-def get_counties():
-    """Return the list of available counties."""
+@app.get("/api/search-areas")
+def get_search_areas():
+    """Return nested country/state/county hierarchy from the hotspots table."""
     con = duckdb.connect(DB_PATH, read_only=True)
     try:
         rows = con.execute(
-            "SELECT DISTINCT county FROM sightings_clean ORDER BY county"
+            "SELECT DISTINCT country, state, county FROM hotspots ORDER BY country, state, county"
         ).fetchall()
-        return [r[0] for r in rows]
+        result = {}
+        for country, state, county in rows:
+            result.setdefault(country, {}).setdefault(state, []).append(county)
+        return result
     finally:
         con.close()
 
@@ -102,7 +106,8 @@ def run_optimization(req: OptimizeRequest):
         end_date=req.end_date,
         k=req.k,
         counties=req.counties,
-        state=req.state,
+        states=req.states,
+        country=req.country,
     )
 
     hotspots = [

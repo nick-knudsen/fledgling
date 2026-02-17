@@ -1,18 +1,27 @@
+import sys
 import duckdb as dk
 
-con = dk.connect('data/arizona.duckdb')
+if len(sys.argv) != 3:
+    print("Usage: python frequency_data_pipeline.py <input_tsv> <output_db>")
+    print("Example: python frequency_data_pipeline.py data/ebd_US-AZ_smp_relDec-2025.txt data/arizona.duckdb")
+    sys.exit(1)
+
+input_tsv = sys.argv[1]
+output_db = sys.argv[2]
+
+con = dk.connect(output_db)
 con.execute("PRAGMA enable_print_progress_bar;")
 con.execute("PRAGMA progress_bar_time=500;")  # show after 500ms instead of 2s
 
 
 # read raw data into duckdb
-print("Reading eBird data into duckdb...")
-con.execute("""--sql
+print(f"Reading {input_tsv} into {output_db}...")
+con.execute(f"""--sql
 DROP TABLE IF EXISTS sightings_raw;
 
 CREATE TABLE sightings_raw AS
-SELECT * 
-FROM read_csv_auto('data/ebd_US-AZ_smp_relDec-2025.txt',
+SELECT *
+FROM read_csv_auto('{input_tsv}',
     delim='\t', sample_size=-1)
 ;
 """)
@@ -209,3 +218,24 @@ SELECT
     FROM rolling
 ;
 """)
+
+print("\nBuilding hotspots lookup table...")
+con.execute("""--sql
+DROP TABLE IF EXISTS hotspots;
+CREATE TABLE hotspots AS
+SELECT
+    locality_id,
+    ANY_VALUE(locality) AS locality,
+    AVG(latitude) AS latitude,
+    AVG(longitude) AS longitude,
+    ANY_VALUE(country) AS country,
+    ANY_VALUE(county) AS county,
+    ANY_VALUE(state) AS state,
+    ANY_VALUE(state_code) AS state_code,
+    COUNT(DISTINCT sampling_id) AS total_checklists
+FROM sightings_clean
+GROUP BY locality_id;
+""")
+print("{} hotspots".format(con.execute("SELECT COUNT(*) FROM hotspots").fetchone()[0]))
+
+print("\nDone.")

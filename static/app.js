@@ -57,74 +57,146 @@ fetch("/api/region-names")
     .then(r => r.json())
     .then(data => { regionNames = data; });
 
+let searchAreas = {}; // country -> { state -> [counties] }
+let selectedCountries = new Set();
+let selectedStates = new Set();
 let selectedCounties = new Set();
 
-fetch("/api/counties")
+fetch("/api/search-areas")
     .then(r => r.json())
-    .then(counties => {
-        const dropdown = document.getElementById("county-dropdown");
-
-        const actions = document.createElement("div");
-        actions.className = "multi-select-actions";
-        actions.innerHTML = `<button id="county-select-all">Select all</button><button id="county-select-none">Select none</button>`;
-        dropdown.appendChild(actions);
-
-        actions.querySelector("#county-select-all").addEventListener("click", (e) => {
-            e.stopPropagation();
-            dropdown.querySelectorAll(".multi-select-item").forEach(item => {
-                selectedCounties.add(item.dataset.value);
-                item.classList.add("selected");
-            });
-            updateCountyDisplay();
-        });
-        actions.querySelector("#county-select-none").addEventListener("click", (e) => {
-            e.stopPropagation();
-            selectedCounties.clear();
-            dropdown.querySelectorAll(".multi-select-item").forEach(item => {
-                item.classList.remove("selected");
-            });
-            updateCountyDisplay();
-        });
-
-        counties.forEach(c => {
-            const item = document.createElement("div");
-            item.className = "multi-select-item";
-            item.dataset.value = c;
-            item.innerHTML = `<span>${c}</span><span class="check">✓</span>`;
-            item.addEventListener("click", (e) => {
-                e.stopPropagation();
-                if (selectedCounties.has(c)) {
-                    selectedCounties.delete(c);
-                    item.classList.remove("selected");
-                } else {
-                    selectedCounties.add(c);
-                    item.classList.add("selected");
-                }
-                updateCountyDisplay();
-            });
-            dropdown.appendChild(item);
-        });
+    .then(data => {
+        searchAreas = data;
+        populateMultiSelect("country", Object.keys(data).sort(), selectedCountries, onCountryChange);
+        refreshStateDropdown();
+        refreshCountyDropdown();
     });
 
-document.getElementById("county-display").addEventListener("click", () => {
-    document.getElementById("county-dropdown").classList.toggle("open");
-});
+function onCountryChange() {
+    selectedStates.clear();
+    selectedCounties.clear();
+    refreshStateDropdown();
+    refreshCountyDropdown();
+}
 
-document.addEventListener("click", (e) => {
-    const select = document.getElementById("county-select");
-    if (!select.contains(e.target)) {
-        document.getElementById("county-dropdown").classList.remove("open");
+function onStateChange() {
+    selectedCounties.clear();
+    refreshCountyDropdown();
+}
+
+function getVisibleStates() {
+    const countries = selectedCountries.size > 0 ? [...selectedCountries] : Object.keys(searchAreas);
+    const states = [];
+    for (const c of countries) {
+        if (searchAreas[c]) states.push(...Object.keys(searchAreas[c]));
     }
-});
+    return states.sort();
+}
 
-function updateCountyDisplay() {
-    const display = document.getElementById("county-display");
-    if (selectedCounties.size === 0) {
-        display.textContent = "All counties";
+function getVisibleCounties() {
+    const countries = selectedCountries.size > 0 ? [...selectedCountries] : Object.keys(searchAreas);
+    const states = selectedStates.size > 0 ? [...selectedStates] : null;
+    const counties = [];
+    for (const c of countries) {
+        if (!searchAreas[c]) continue;
+        for (const [st, cts] of Object.entries(searchAreas[c])) {
+            if (states && !states.includes(st)) continue;
+            counties.push(...cts);
+        }
+    }
+    return counties.sort();
+}
+
+function refreshStateDropdown() {
+    populateMultiSelect("state", getVisibleStates(), selectedStates, onStateChange);
+    updateMultiSelectDisplay("state", selectedStates, "All states");
+}
+
+function refreshCountyDropdown() {
+    populateMultiSelect("county", getVisibleCounties(), selectedCounties, () => {
+        updateMultiSelectDisplay("county", selectedCounties, "All counties");
+    });
+    updateMultiSelectDisplay("county", selectedCounties, "All counties");
+}
+
+function populateMultiSelect(id, items, selectedSet, onChange) {
+    if (!Array.isArray(items)) items = [];
+    const dropdown = document.getElementById(`${id}-dropdown`);
+    dropdown.innerHTML = "";
+
+    const actions = document.createElement("div");
+    actions.className = "multi-select-actions";
+    actions.innerHTML = `<button data-action="all">Select all</button><button data-action="none">Select none</button>`;
+    dropdown.appendChild(actions);
+
+    actions.querySelector("[data-action='all']").addEventListener("click", (e) => {
+        e.stopPropagation();
+        dropdown.querySelectorAll(".multi-select-item").forEach(item => {
+            selectedSet.add(item.dataset.value);
+            item.classList.add("selected");
+        });
+        updateMultiSelectDisplay(id, selectedSet, `All ${id === "county" ? "counties" : id + "s"}`);
+        onChange();
+    });
+    actions.querySelector("[data-action='none']").addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectedSet.clear();
+        dropdown.querySelectorAll(".multi-select-item").forEach(item => {
+            item.classList.remove("selected");
+        });
+        updateMultiSelectDisplay(id, selectedSet, `All ${id === "county" ? "counties" : id + "s"}`);
+        onChange();
+    });
+
+    items.forEach(val => {
+        const item = document.createElement("div");
+        item.className = "multi-select-item";
+        if (selectedSet.has(val)) item.classList.add("selected");
+        item.dataset.value = val;
+        item.innerHTML = `<span>${val}</span><span class="check">✓</span>`;
+        item.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (selectedSet.has(val)) {
+                selectedSet.delete(val);
+                item.classList.remove("selected");
+            } else {
+                selectedSet.add(val);
+                item.classList.add("selected");
+            }
+            updateMultiSelectDisplay(id, selectedSet, `All ${id === "county" ? "counties" : id + "s"}`);
+            onChange();
+        });
+        dropdown.appendChild(item);
+    });
+}
+
+function updateMultiSelectDisplay(id, selectedSet, defaultText) {
+    const display = document.getElementById(`${id}-display`);
+    if (selectedSet.size === 0) {
+        display.textContent = defaultText;
     } else {
-        display.textContent = Array.from(selectedCounties).join(", ");
+        display.textContent = Array.from(selectedSet).join(", ");
     }
 }
+
+// Toggle dropdowns open/closed and close on outside click
+for (const id of ["country", "state", "county"]) {
+    document.getElementById(`${id}-display`).addEventListener("click", () => {
+        // Close other dropdowns
+        for (const other of ["country", "state", "county"]) {
+            if (other !== id) document.getElementById(`${other}-dropdown`).classList.remove("open");
+        }
+        document.getElementById(`${id}-dropdown`).classList.toggle("open");
+    });
+}
+
+document.addEventListener("click", (e) => {
+    for (const id of ["country", "state", "county"]) {
+        const select = document.getElementById(`${id}-select`);
+        if (!select.contains(e.target)) {
+            document.getElementById(`${id}-dropdown`).classList.remove("open");
+        }
+    }
+});
 
 // Parse CSV client-side
 document.getElementById("csv-input").addEventListener("change", e => {
@@ -345,12 +417,16 @@ document.getElementById("optimize-btn").addEventListener("click", async () => {
     btn.textContent = "Optimizing...";
 
     const counties = Array.from(selectedCounties);
+    const states = Array.from(selectedStates);
+    const countries = Array.from(selectedCountries);
     const body = {
         life_list: lifeList,
         start_date: document.getElementById("start-date").value,
         end_date: document.getElementById("end-date").value,
         k: parseInt(document.getElementById("k-input").value),
         counties: counties.length > 0 ? counties : null,
+        states: counties.length === 0 && states.length > 0 ? states : null,
+        country: counties.length === 0 && states.length === 0 && countries.length === 1 ? countries[0] : null,
     };
 
     try {

@@ -56,7 +56,8 @@ def load_probability_matrix(
     days_of_year: list[int],
     life_list_names: list[str],
     counties: Optional[list[str]] = None,
-    state: Optional[str] = None,
+    states: Optional[list[str]] = None,
+    country: Optional[str] = None,
 ) -> tuple[pd.DataFrame, np.ndarray, list[str]]:
     """Load and prepare the probability matrix from the database.
 
@@ -77,28 +78,20 @@ def load_probability_matrix(
     if counties:
         county_list = ", ".join(f"'{c}'" for c in counties)
         geo_filter = f"h.county IN ({county_list})"
-    elif state:
-        geo_filter = f"h.state = '{state}'"
+    elif states:
+        state_list = ", ".join(f"'{s}'" for s in states)
+        geo_filter = f"h.state IN ({state_list})"
+    elif country:
+        geo_filter = f"h.country = '{country}'"
 
     query = f"""
-    WITH hotspot_coords AS (
-        SELECT
-            locality_id,
-            ANY_VALUE(locality) AS locality,
-            AVG(latitude) AS latitude,
-            AVG(longitude) AS longitude,
-            ANY_VALUE(county) AS county,
-            ANY_VALUE(state) AS state
-        FROM sightings_clean
-        GROUP BY locality_id
-    ),
-    filtered_freq AS (
+    WITH filtered_freq AS (
         SELECT
             r.locality_id,
             r.common_name,
             MAX(GREATEST(r.wilson_lower_bound, 0)) AS detection_prob
         FROM rolling_avg_freq r
-        JOIN hotspot_coords h ON r.locality_id = h.locality_id
+        JOIN hotspots h ON r.locality_id = h.locality_id
         WHERE r.day_of_year IN ({day_list})
           AND r.common_name NOT IN (SELECT common_name FROM life_list_view)
           AND {geo_filter}
@@ -113,7 +106,7 @@ def load_probability_matrix(
         f.common_name,
         f.detection_prob
     FROM filtered_freq f
-    JOIN hotspot_coords h ON f.locality_id = h.locality_id
+    JOIN hotspots h ON f.locality_id = h.locality_id
     WHERE f.detection_prob > 0
     ORDER BY f.locality_id, f.common_name
     """
@@ -193,35 +186,26 @@ def optimize_hotspots(
     end_date: date,
     k: int = 5,
     counties: Optional[list[str]] = None,
-    state: Optional[str] = None,
+    states: Optional[list[str]] = None,
+    country: Optional[str] = None,
 ) -> OptimizationResult:
-    """Main entry point for the hotspot optimizer.
-
-    Args:
-        db_path: Path to the DuckDB database.
-        life_list_names: Species names the user has already seen.
-        start_date: Start of date range (inclusive).
-        end_date: End of date range (inclusive).
-        k: Number of hotspots to select.
-        counties: Filter to these county names.
-        state: Filter to this state name.
-
-    Returns:
-        OptimizationResult with selected hotspots and expected lifers.
-    """
+    """Main entry point for the hotspot optimizer."""
     days_of_year = date_range_to_days_of_year(start_date, end_date)
 
     geo_parts = []
     if counties:
         geo_parts.append(", ".join(counties))
-    if state:
-        geo_parts.append(state)
+    if states:
+        geo_parts.append(", ".join(states))
+    if country:
+        geo_parts.append(country)
     geo_description = ", ".join(geo_parts) if geo_parts else "All areas"
 
     con = duckdb.connect(db_path, read_only=True)
     try:
         hotspot_info, prob_matrix, species_list = load_probability_matrix(
-            con, days_of_year, life_list_names, counties=counties, state=state,
+            con, days_of_year, life_list_names,
+            counties=counties, states=states, country=country,
         )
     finally:
         con.close()
