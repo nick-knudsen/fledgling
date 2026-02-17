@@ -97,23 +97,28 @@ _taxonomy_cache: list[dict] | None = None
 
 @app.get("/api/species")
 def get_species():
-    """Return bird species from the eBird taxonomy (cached in memory)."""
+    """Return bird species from the species table (cached in memory)."""
     global _taxonomy_cache
     if _taxonomy_cache is None:
-        url = "https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&cat=species,issf,domestic,form"
-        req = Request(url, headers={"X-eBirdApiToken": EBIRD_API_KEY})
-        with urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
+        con = duckdb.connect(DB_PATH, read_only=True)
+        try:
+            rows = con.execute(
+                "SELECT species_code, common_name, scientific_name, category, "
+                "banding_codes, com_name_codes, sci_name_codes "
+                "FROM species WHERE category != 'issf' ORDER BY taxon_order"
+            ).fetchall()
+        finally:
+            con.close()
         _taxonomy_cache = [
             {
-                "comName": sp["comName"],
-                "sciName": sp["sciName"],
-                "speciesCode": sp["speciesCode"],
-                "comNameCodes": sp.get("comNameCodes", []),
-                "sciNameCodes": sp.get("sciNameCodes", []),
-                "bandingCodes": sp.get("bandingCodes", []),
+                "comName": row[1],
+                "sciName": row[2],
+                "speciesCode": row[0],
+                "bandingCodes": row[4] or [],
+                "comNameCodes": row[5] or [],
+                "sciNameCodes": row[6] or [],
             }
-            for sp in data
+            for row in rows
         ]
     return _taxonomy_cache
 

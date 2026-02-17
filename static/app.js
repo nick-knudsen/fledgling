@@ -658,3 +658,111 @@ function toggleHotspotBody(rank) {
     // Scroll card into view if triggered from map
     card.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
+
+// Species search autocomplete
+let allSpecies = []; // loaded from API
+let selectedSpecies = null;
+let activeDropdownIndex = -1;
+
+fetch("/api/species")
+    .then(r => r.json())
+    .then(data => { allSpecies = data; });
+
+const speciesInput = document.getElementById("species-input");
+const speciesDropdown = document.getElementById("species-dropdown");
+const speciesSelected = document.getElementById("species-selected");
+
+function searchRank(species, query) {
+    // Returns 0 (no match) or 1-6 (priority, lower = better match)
+    const q = query.toLowerCase();
+    if (species.comName.toLowerCase().includes(q)) return 1;
+    if (species.bandingCodes.some(c => c.toLowerCase().startsWith(q))) return 2;
+    if (species.comNameCodes.some(c => c.toLowerCase().startsWith(q))) return 3;
+    if (species.sciNameCodes.some(c => c.toLowerCase().startsWith(q))) return 4;
+    if (species.speciesCode.toLowerCase().startsWith(q)) return 5;
+    if (species.sciName.toLowerCase().includes(q)) return 6;
+    return 0;
+}
+
+function rankedSearch(query) {
+    const scored = [];
+    for (const sp of allSpecies) {
+        const rank = searchRank(sp, query);
+        if (rank > 0) scored.push({ sp, rank });
+    }
+    scored.sort((a, b) => a.rank - b.rank);
+    return scored.slice(0, 20).map(s => s.sp);
+}
+
+function renderSpeciesDropdown(matches) {
+    speciesDropdown.innerHTML = "";
+    activeDropdownIndex = -1;
+
+    if (matches.length === 0) {
+        speciesDropdown.classList.remove("open");
+        return;
+    }
+
+    matches.slice(0, 20).forEach((sp) => {
+        const item = document.createElement("div");
+        item.className = "species-dropdown-item";
+        item.innerHTML = `${sp.comName}<span class="sci-name">${sp.sciName}</span>`;
+        item.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            selectSpecies(sp);
+        });
+        speciesDropdown.appendChild(item);
+    });
+    speciesDropdown.classList.add("open");
+}
+
+function selectSpecies(sp) {
+    selectedSpecies = sp;
+    speciesInput.value = sp.comName;
+    speciesDropdown.classList.remove("open");
+    speciesSelected.textContent = `Selected: ${sp.comName}`;
+}
+
+speciesInput.addEventListener("input", () => {
+    const q = speciesInput.value.trim();
+    if (q.length < 2) {
+        speciesDropdown.classList.remove("open");
+        return;
+    }
+    const matches = rankedSearch(q);
+    renderSpeciesDropdown(matches);
+});
+
+speciesInput.addEventListener("keydown", (e) => {
+    const items = speciesDropdown.querySelectorAll(".species-dropdown-item");
+    if (!items.length) return;
+
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        activeDropdownIndex = Math.min(activeDropdownIndex + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle("active", i === activeDropdownIndex));
+        items[activeDropdownIndex].scrollIntoView({ block: "nearest" });
+    } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        activeDropdownIndex = Math.max(activeDropdownIndex - 1, 0);
+        items.forEach((el, i) => el.classList.toggle("active", i === activeDropdownIndex));
+        items[activeDropdownIndex].scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter" && activeDropdownIndex >= 0) {
+        e.preventDefault();
+        const q = speciesInput.value.trim();
+        const matches = rankedSearch(q);
+        if (matches[activeDropdownIndex]) selectSpecies(matches[activeDropdownIndex]);
+    }
+});
+
+speciesInput.addEventListener("blur", () => {
+    speciesDropdown.classList.remove("open");
+});
+
+speciesInput.addEventListener("focus", () => {
+    const q = speciesInput.value.trim();
+    if (q.length >= 2) {
+        const matches = rankedSearch(q);
+        renderSpeciesDropdown(matches);
+    }
+});
