@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@800&display=swap" rel="stylesheet">
+<style>
+  body {
+    margin: 0;
+    background: #2a2a2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .logo-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: flex-end;
+    line-height: 1;
+  }
+
+  .logo-text {
+    font-family: 'Nunito', Arial, sans-serif;
+    font-weight: 800;
+    font-size: 96px;
+    color: #1a73e8;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+
+  .letter-i-wrap {
+    position: relative;
+    display: inline-block;
+  }
+
+  .i-dot-cover {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 28px;
+    z-index: 1;
+  }
+
+  .i-dot-icon {
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+  }
+
+  .logo-card {
+    padding: 14px 20px 10px;
+    border-radius: 16px;
+    display: inline-block;
+  }
+
+  .light-bg {
+    background: white;
+  }
+
+  .light-bg .i-dot-cover {
+    background: white;
+  }
+
+  .dark-bg {
+    background: #1a1a1a;
+  }
+
+  .dark-bg .logo-text {
+    color: #ffffff;
+  }
+
+  .dark-bg .i-dot-cover {
+    background: #1a1a1a;
+  }
+
+  label {
+    font-family: sans-serif;
+    font-size: 13px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+
+<!-- LIGHT -->
+<label>Light</label>
+<div class="logo-card light-bg">
+  <div class="logo-wrap">
+    <span class="logo-text">l</span>
+    <span class="letter-i-wrap logo-text">
+      i
+      <span class="i-dot-cover"></span>
+      <svg class="i-dot-icon" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 4C20.954 4 12 12.954 12 24c0 14 20 36 20 36s20-22 20-36C52 12.954 43.046 4 32 4z"
+              fill="#1a73e8" stroke="#1a73e8" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M20 24 Q26 16 32 22 Q38 16 44 24"
+              fill="none" stroke="white" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
+    <span class="logo-text">str</span>
+  </div>
+</div>
+
+<!-- DARK -->
+<label>Dark</label>
+<div class="logo-card dark-bg">
+  <div class="logo-wrap">
+    <span class="logo-text">l</span>
+    <span class="letter-i-wrap logo-text">
+      i
+      <span class="i-dot-cover"></span>
+      <svg class="i-dot-icon" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 4C20.954 4 12 12.954 12 24c0 14 20 36 20 36s20-22 20-36C52 12.954 43.046 4 32 4z"
+              fill="#ffffff" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M20 24 Q26 16 32 22 Q38 16 44 24"
+              fill="none" stroke="#1a1a1a" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
+    <span class="logo-text">str</span>
+  </div>
+</div>
+
+</body>
+</html>
