@@ -161,11 +161,10 @@ GROUP BY locality_id;
 """)
 print("{} hotspots".format(con.execute("SELECT COUNT(*) FROM hotspots").fetchone()[0]))
 
-print("\nCalculating checklist and detection counts...")
-# group checklists and sighting counts by locality, date, and species
+print("\nCalculating wilson scores...")
 con.execute("""--sql
-DROP TABLE IF EXISTS detection_frequencies;
-CREATE TABLE detection_frequencies AS
+DROP TABLE IF EXISTS rolling_wilson_score;
+CREATE TABLE rolling_wilson_score AS
 WITH checklists AS (
     SELECT
         locality,
@@ -174,7 +173,9 @@ WITH checklists AS (
         COUNT(DISTINCT sampling_id) AS total_checklists
     FROM sightings_filtered
     GROUP BY locality, locality_id, day_of_year
-), detections AS (
+),
+
+detections AS (
     SELECT
         locality_id,
         DAYOFYEAR(observation_date) AS day_of_year,
@@ -182,35 +183,31 @@ WITH checklists AS (
         COUNT(DISTINCT sampling_id) AS total_detections
     FROM sightings_filtered
     GROUP BY locality_id, day_of_year, common_name
-), species AS (
+),
+
+species AS (
     SELECT DISTINCT
         locality_id,
         common_name
     FROM sightings_filtered
-)
+),
 
-SELECT
-    c.locality,
-    c.locality_id,
-    c.day_of_year,
-    s.common_name,
-    COALESCE(d.total_detections, 0) AS total_detections,
-    c.total_checklists
-FROM checklists c
-JOIN species s
-    ON s.locality_id = c.locality_id
-LEFT JOIN detections d
-    ON d.locality_id = c.locality_id AND d.day_of_year = c.day_of_year AND d.common_name = s.common_name
-ORDER BY c.locality_id, c.day_of_year DESC
-;
-""")
+detection_frequencies AS (
+    SELECT
+        c.locality,
+        c.locality_id,
+        c.day_of_year,
+        s.common_name,
+        COALESCE(d.total_detections, 0) AS total_detections,
+        c.total_checklists
+    FROM checklists c
+    JOIN species s
+        ON s.locality_id = c.locality_id
+    LEFT JOIN detections d
+        ON d.locality_id = c.locality_id AND d.day_of_year = c.day_of_year AND d.common_name = s.common_name
+),
 
-print("\nCalculating frequencies...")
-# calculate rolling average observations, checklists, frequency, and wilson lower bound CI 
-con.execute("""--sql
-DROP TABLE IF EXISTS rolling_wilson_score;
-CREATE TABLE rolling_wilson_score AS
-WITH wrapped AS (
+wrapped AS (
     SELECT
         *,
         day_of_year AS wrapped_day_of_year
@@ -231,9 +228,7 @@ rolling AS (
         locality_id,
         day_of_year,
         common_name,
-        total_detections,
         SUM(total_detections) OVER w AS k,
-        total_checklists,
         SUM(total_checklists) OVER w AS n
     FROM wrapped
     WHERE 4 <= wrapped_day_of_year AND wrapped_day_of_year <= 369
@@ -242,7 +237,6 @@ rolling AS (
         ORDER BY wrapped_day_of_year
         RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
     )
-    ORDER BY day_of_year
 )
 
 SELECT
@@ -250,9 +244,6 @@ SELECT
     locality_id,
     day_of_year,
     common_name,
-    --k::INT AS rolling_detections,
-    --n::INT AS rolling_checklists,
-    --k::DOUBLE / n AS rolling_freq,
     ((k::DOUBLE / n)
         + (1.64 * 1.64) / (2 * n)
         - 1.64 * SQRT(
@@ -264,8 +255,7 @@ SELECT
     (1 + (1.64 * 1.64) / n) AS wilson_lower_bound
     FROM rolling
 ;
+DROP TABLE sightings_filtered;
 """)
-
-
 
 print("\nDone.")
