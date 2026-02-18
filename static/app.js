@@ -179,7 +179,7 @@ function getVisibleCounties() {
 
 function refreshStateDropdown() {
     populateMultiSelect("state", getVisibleStates(), selectedStates, onStateChange);
-    updateMultiSelectDisplay("state", selectedStates, "All states");
+    updateMultiSelectDisplay("state", selectedStates, "All states/provinces");
 }
 
 function refreshCountyDropdown() {
