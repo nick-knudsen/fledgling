@@ -16,25 +16,49 @@ con = dk.connect("data/dbs/" + output_db)
 con.execute("PRAGMA enable_print_progress_bar;")
 con.execute("PRAGMA progress_bar_time=500;")  # show after 500ms instead of 2s
 
-
-# read raw data into duckdb
+# read raw data and stage for frequency calculations
 print(f"Reading {input_tsv} into {output_db}...")
-con.execute(f"""--sql
-DROP TABLE IF EXISTS sightings_raw;
-
-CREATE TABLE sightings_raw AS
-SELECT *
-FROM read_csv_auto('data/raw/{input_tsv}',
-    delim='\t', sample_size=-1)
-;
-""")
-print("Read {} rows".format(con.execute("SELECT COUNT(*) FROM sightings_raw").fetchone()[0]))
-print("\nStaging data for frequency calculations...")
 # rename columns for easier querying
 # keep only complete checklists from hotspot locations
-con.execute("""--sql
+con.execute(f"""--sql
 DROP TABLE IF EXISTS sightings_staging;
 CREATE TABLE sightings_staging AS
+WITH sightings_raw AS (
+    SELECT *
+    FROM read_csv('data/raw/{input_tsv}',
+        delim='\t',
+        header=true,
+        columns={{
+            'GLOBAL UNIQUE IDENTIFIER': 'VARCHAR',
+            'LAST EDITED DATE': 'VARCHAR',
+            'TAXONOMIC ORDER': 'INT',
+            'CATEGORY': 'VARCHAR',
+            'COMMON NAME': 'VARCHAR',
+            'SCIENTIFIC NAME': 'VARCHAR',
+            'OBSERVATION COUNT': 'VARCHAR',
+            'COUNTRY': 'VARCHAR',
+            'COUNTRY CODE': 'VARCHAR',
+            'STATE': 'VARCHAR',
+            'STATE CODE': 'VARCHAR',
+            'COUNTY': 'VARCHAR',
+            'COUNTY CODE': 'VARCHAR',
+            'LOCALITY': 'VARCHAR',
+            'LOCALITY ID': 'VARCHAR',
+            'LOCALITY TYPE': 'VARCHAR',
+            'LATITUDE': 'FLOAT',
+            'LONGITUDE': 'FLOAT',
+            'OBSERVATION DATE': 'DATE',
+            'TIME OBSERVATIONS STARTED': 'VARCHAR',
+            'OBSERVER ID': 'VARCHAR',
+            'SAMPLING EVENT IDENTIFIER': 'VARCHAR',
+            'OBSERVATION TYPE': 'VARCHAR',
+            'DURATION MINUTES': 'INT',
+            'EFFORT DISTANCE KM': 'FLOAT',
+            'NUMBER OBSERVERS': 'INT',
+            'ALL SPECIES REPORTED': 'BOOLEAN',
+            'GROUP IDENTIFIER': 'VARCHAR'
+        }})
+)
 SELECT
     TRY_CAST(REGEXP_EXTRACT("GLOBAL UNIQUE IDENTIFIER", '(\\d+)$') AS BIGINT) AS global_id,
     TRY_CAST("LAST EDITED DATE" AS DATE) AS last_edited_date,
@@ -63,11 +87,11 @@ SELECT
     "EFFORT DISTANCE KM"::FLOAT AS effort_distance_km,
     "NUMBER OBSERVERS"::INT AS number_observers,
     "ALL SPECIES REPORTED"::BOOLEAN as all_species_reported,
-    TRY_CAST(REGEXP_EXTRACT("GROUP IDENTIFIER", '(\\d+)$') AS BIGINT) AS group_id  
+    TRY_CAST(REGEXP_EXTRACT("GROUP IDENTIFIER", '(\\d+)$') AS BIGINT) AS group_id
 FROM sightings_raw
-WHERE locality_type == 'H' AND
-    (species_category == 'species' OR species_category == 'issf' OR species_category == 'form' OR species_category == 'domestic') AND
-    all_species_reported IS TRUE
+WHERE "LOCALITY TYPE" = 'H' AND
+    ("CATEGORY" IN ('species', 'issf', 'form', 'domestic')) AND
+    "ALL SPECIES REPORTED" IS TRUE
 ;
 """)
 
