@@ -55,6 +55,7 @@ WITH sightings_raw AS (
         "GROUP IDENTIFIER"
     FROM read_csv_auto('data/raw/{input_tsv}',
         delim='\t',
+        quote='',
         types={{
             'LATITUDE': 'FLOAT',
             'LONGITUDE': 'FLOAT',
@@ -168,6 +169,7 @@ print("\nCalculating wilson scores...")
 con.execute("""--sql
 DROP TABLE IF EXISTS rolling_wilson_score;
 CREATE TABLE rolling_wilson_score AS
+-- Rolling checklists: species-independent, computed once per (locality, day)
 WITH checklists AS (
     SELECT
         locality_id,
@@ -177,82 +179,71 @@ WITH checklists AS (
     GROUP BY locality_id, day_of_year
 ),
 
+-- Self-join to compute 7-day rolling checklist totals with year-boundary wrapping
+rolling_checklists AS (
+    SELECT
+        a.locality_id,
+        a.day_of_year,
+        SUM(b.total_checklists) AS n
+    FROM checklists a
+    JOIN checklists b
+        ON a.locality_id = b.locality_id
+        AND (
+            (b.day_of_year BETWEEN a.day_of_year - 3 AND a.day_of_year + 3)
+            OR (a.day_of_year <= 3 AND b.day_of_year >= 366 + a.day_of_year - 3)
+            OR (a.day_of_year >= 363 AND b.day_of_year <= a.day_of_year + 3 - 366)
+        )
+    GROUP BY a.locality_id, a.day_of_year
+),
+
+-- Detections: sparse, only rows where species was actually detected
 detections AS (
     SELECT
         locality_id,
         DAYOFYEAR(observation_date) AS day_of_year,
         common_name,
-        COUNT(sampling_id) AS total_detections -- DISTINCT not needed since we are grouping by common_name
+        COUNT(sampling_id) AS total_detections
     FROM sightings_filtered
     GROUP BY locality_id, day_of_year, common_name
 ),
 
-species AS (
-    SELECT DISTINCT
-        locality_id,
-        common_name
-    FROM sightings_filtered
-),
-
-detection_frequencies AS (
+-- Join checklist days with nearby detections to get rolling detection totals
+-- Only produces rows where k > 0 (species detected within ±3 day window)
+rolling_detections AS (
     SELECT
         c.locality_id,
         c.day_of_year,
-        s.common_name,
-        COALESCE(d.total_detections, 0) AS total_detections,
-        c.total_checklists
+        d.common_name,
+        SUM(d.total_detections) AS k
     FROM checklists c
-    JOIN species s
-        ON s.locality_id = c.locality_id
-    LEFT JOIN detections d
-        ON d.locality_id = c.locality_id AND d.day_of_year = c.day_of_year AND d.common_name = s.common_name
-),
-
-wrapped AS (
-    SELECT
-        *,
-        day_of_year AS wrapped_day_of_year
-    FROM detection_frequencies
-
-    UNION ALL
-
-    SELECT
-        *,
-        day_of_year + 366 AS wrapped_day_of_year
-    FROM detection_frequencies
-    WHERE day_of_year <= 6
-),
-
-rolling AS (
-    SELECT
-        locality_id,
-        day_of_year,
-        common_name,
-        SUM(total_detections) OVER w AS k,
-        SUM(total_checklists) OVER w AS n
-    FROM wrapped
-    WHERE 4 <= wrapped_day_of_year AND wrapped_day_of_year <= 369
-    WINDOW w AS (
-        PARTITION BY locality_id, common_name
-        ORDER BY wrapped_day_of_year
-        RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
-    )
+    JOIN detections d
+        ON c.locality_id = d.locality_id
+        AND (
+            (d.day_of_year BETWEEN c.day_of_year - 3 AND c.day_of_year + 3)
+            OR (c.day_of_year <= 3 AND d.day_of_year >= 366 + c.day_of_year - 3)
+            OR (c.day_of_year >= 363 AND d.day_of_year <= c.day_of_year + 3 - 366)
+        )
+    GROUP BY c.locality_id, c.day_of_year, d.common_name
 )
 
+-- Join rolling detections with rolling checklists to compute Wilson lower bound
 SELECT
-    locality_id,
-    day_of_year,
-    common_name,
-    ((k::DOUBLE / n)
-        + (1.64 * 1.64) / (2 * n)
+    d.locality_id,
+    d.day_of_year,
+    d.common_name,
+    ((d.k::DOUBLE / c.n)
+        + (1.64 * 1.64) / (2 * c.n)
         - 1.64 * SQRT(GREATEST(
-            ((k::DOUBLE / n) * (1 - (k::DOUBLE / n)) / n)
-            + ((1.64 * 1.64) / (4 * n * n))
+            ((d.k::DOUBLE / c.n) * (1 - (d.k::DOUBLE / c.n)) / c.n)
+            + ((1.64 * 1.64) / (4 * c.n * c.n))
         , 0))
     )
     /
-    (1 + (1.64 * 1.64) / n) AS wilson_lower_bound
-    FROM rolling
+    (1 + (1.64 * 1.64) / c.n) AS wilson_lower_bound
+FROM rolling_detections d
+JOIN rolling_checklists c
+    ON d.locality_id = c.locality_id
+    AND d.day_of_year = c.day_of_year
 ;
 DROP TABLE sightings_filtered;
 """)

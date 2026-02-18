@@ -412,16 +412,19 @@ document.getElementById("use-my-location").addEventListener("click", () => {
     );
 });
 
-// Scroll wheel adjusts driving time
-document.getElementById("max-driving-minutes").addEventListener("wheel", (e) => {
-    e.preventDefault();
-    const input = e.currentTarget;
-    const step = e.shiftKey ? 10 : 1;
-    const delta = e.deltaY < 0 ? step : -step;
-    const current = parseInt(input.value) || 0;
-    const next = Math.max(1, Math.min(480, current + delta));
-    input.value = next;
-});
+// Scroll wheel adjusts number inputs
+function addScrollWheel(id, min, max) {
+    document.getElementById(id).addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const input = e.currentTarget;
+        const step = e.shiftKey ? 10 : 1;
+        const delta = e.deltaY < 0 ? step : -step;
+        const current = parseInt(input.value) || 0;
+        input.value = Math.max(min, Math.min(max, current + delta));
+    });
+}
+addScrollWheel("max-driving-minutes", 1, 480);
+addScrollWheel("k-input", 1, 20);
 
 locationInput.addEventListener("blur", () => {
     locationDropdown.classList.remove("open");
