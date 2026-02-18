@@ -35,7 +35,7 @@ WITH sightings_raw AS (
             --'TAXONOMIC ORDER': 'INT',
             'CATEGORY': 'VARCHAR',
             'COMMON NAME': 'VARCHAR',
-            'SCIENTIFIC NAME': 'VARCHAR',
+            --'SCIENTIFIC NAME': 'VARCHAR',
             'OBSERVATION COUNT': 'VARCHAR',
             'COUNTRY': 'VARCHAR',
             --'COUNTRY CODE': 'VARCHAR',
@@ -52,7 +52,7 @@ WITH sightings_raw AS (
             --'TIME OBSERVATIONS STARTED': 'VARCHAR',
             --'OBSERVER ID': 'VARCHAR',
             'SAMPLING EVENT IDENTIFIER': 'VARCHAR',
-            'OBSERVATION TYPE': 'VARCHAR',
+            --'OBSERVATION TYPE': 'VARCHAR',
             --'DURATION MINUTES': 'INT',
             --'EFFORT DISTANCE KM': 'FLOAT',
             --'NUMBER OBSERVERS': 'INT',
@@ -66,10 +66,10 @@ sightings_staging AS (
         --TRY_CAST(REGEXP_EXTRACT("GLOBAL UNIQUE IDENTIFIER", '(\\d+)$') AS BIGINT) AS global_id,
         --TRY_CAST("LAST EDITED DATE" AS DATE) AS last_edited_date,
         --"TAXONOMIC ORDER" as taxonomic_order,
-        "CATEGORY" as species_category,
+        --"CATEGORY" as species_category,
         "COMMON NAME" as common_name,
-        "SCIENTIFIC NAME" as scientific_name,
-        TRY_CAST("OBSERVATION COUNT" AS INT) AS observation_count,
+        --"SCIENTIFIC NAME" as scientific_name,
+        --TRY_CAST("OBSERVATION COUNT" AS INT) AS observation_count,
         "COUNTRY" as country,
         --"COUNTRY CODE" as country_code,
         "STATE" as state,
@@ -78,23 +78,24 @@ sightings_staging AS (
         --"COUNTY CODE" as county_code,
         "LOCALITY" as locality,
         TRY_CAST(REGEXP_EXTRACT("LOCALITY ID", '(\\d+)$') AS BIGINT) AS locality_id,
-        "LOCALITY TYPE" as locality_type,
+        --"LOCALITY TYPE" as locality_type,
         "LATITUDE" as latitude,
         "LONGITUDE" as longitude,
         "OBSERVATION DATE" as observation_date,
         --TRY_CAST("TIME OBSERVATIONS STARTED" AS TIME) AS time_observations_started,
         --TRY_CAST(REGEXP_EXTRACT("OBSERVER ID", '(\\d+)$') AS BIGINT) AS observer_id,
         TRY_CAST(REGEXP_EXTRACT("SAMPLING EVENT IDENTIFIER", '(\\d+)$') AS BIGINT) AS sampling_id,
-        "OBSERVATION TYPE" as observation_type,
+        --"OBSERVATION TYPE" as observation_type,
         --"DURATION MINUTES"::INT AS duration_minutes,
         --"EFFORT DISTANCE KM"::FLOAT AS effort_distance_km,
         --"NUMBER OBSERVERS"::INT AS number_observers,
-        "ALL SPECIES REPORTED" as all_species_reported,
+        --"ALL SPECIES REPORTED" as all_species_reported,
         TRY_CAST(REGEXP_EXTRACT("GROUP IDENTIFIER", '(\\d+)$') AS BIGINT) AS group_id
     FROM sightings_raw
     WHERE "LOCALITY TYPE" = 'H' AND
         ("CATEGORY" IN ('species', 'issf', 'form', 'domestic')) AND
-        "ALL SPECIES REPORTED" IS TRUE
+        "ALL SPECIES REPORTED" IS TRUE AND
+        "OBSERVATION COUNT" != '0'
 ),
 
 -- deduplicate group checklists
@@ -167,12 +168,11 @@ DROP TABLE IF EXISTS rolling_wilson_score;
 CREATE TABLE rolling_wilson_score AS
 WITH checklists AS (
     SELECT
-        locality,
         locality_id,
         DAYOFYEAR(observation_date) AS day_of_year,
         COUNT(DISTINCT sampling_id) AS total_checklists
     FROM sightings_filtered
-    GROUP BY locality, locality_id, day_of_year
+    GROUP BY locality_id, day_of_year
 ),
 
 detections AS (
@@ -194,7 +194,6 @@ species AS (
 
 detection_frequencies AS (
     SELECT
-        c.locality,
         c.locality_id,
         c.day_of_year,
         s.common_name,
@@ -224,7 +223,6 @@ wrapped AS (
 
 rolling AS (
     SELECT
-        locality,
         locality_id,
         day_of_year,
         common_name,
@@ -240,7 +238,6 @@ rolling AS (
 )
 
 SELECT
-    locality,
     locality_id,
     day_of_year,
     common_name,
