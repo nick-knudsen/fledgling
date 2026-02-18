@@ -46,8 +46,13 @@ header {
     padding: 1.5rem 2rem; display: flex; justify-content: space-between; align-items: center;
 }
 
-header h1 { font-size: 1.5rem; font-weight: 600; }
 header p { color: var(--text-secondary); margin-top: 0.25rem; font-size: 0.9rem; }
+
+/* Logo */
+.logo { height: 2rem; vertical-align: middle; }
+.logo-dark { display: none; }
+html[data-theme="dark"] .logo-light { display: none; }
+html[data-theme="dark"] .logo-dark { display: inline; }
 
 .theme-switch {
     position: fixed; bottom: 1rem; left: 1rem; z-index: 1000;
