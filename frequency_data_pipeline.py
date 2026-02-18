@@ -16,130 +16,150 @@ con = dk.connect("data/dbs/" + output_db)
 con.execute("PRAGMA enable_print_progress_bar;")
 con.execute("PRAGMA progress_bar_time=500;")  # show after 500ms instead of 2s
 
-# read raw data and stage for frequency calculations
+# read raw data, stage, deduplicate, and filter vagrants
 print(f"Reading {input_tsv} into {output_db}...")
-# rename columns for easier querying
-# keep only complete checklists from hotspot locations
 con.execute(f"""--sql
-DROP TABLE IF EXISTS sightings_staging;
-CREATE TABLE sightings_staging AS
+DROP TABLE IF EXISTS sightings_filtered;
+CREATE TABLE sightings_filtered AS
 WITH sightings_raw AS (
     SELECT *
     FROM read_csv('data/raw/{input_tsv}',
         delim='\t',
         header=true,
         columns={{
-            'GLOBAL UNIQUE IDENTIFIER': 'VARCHAR',
-            'LAST EDITED DATE': 'VARCHAR',
-            'TAXONOMIC ORDER': 'INT',
+            -- Commenting out currently unneeded columns to speed up processing - can always add them back later
+            -- Make sure to comment/uncomment the corrsponding columns in the SELECT statement below as well
+
+            --'GLOBAL UNIQUE IDENTIFIER': 'VARCHAR',
+            --'LAST EDITED DATE': 'VARCHAR',
+            --'TAXONOMIC ORDER': 'INT',
             'CATEGORY': 'VARCHAR',
             'COMMON NAME': 'VARCHAR',
             'SCIENTIFIC NAME': 'VARCHAR',
             'OBSERVATION COUNT': 'VARCHAR',
             'COUNTRY': 'VARCHAR',
-            'COUNTRY CODE': 'VARCHAR',
+            --'COUNTRY CODE': 'VARCHAR',
             'STATE': 'VARCHAR',
             'STATE CODE': 'VARCHAR',
             'COUNTY': 'VARCHAR',
-            'COUNTY CODE': 'VARCHAR',
+            --'COUNTY CODE': 'VARCHAR',
             'LOCALITY': 'VARCHAR',
             'LOCALITY ID': 'VARCHAR',
             'LOCALITY TYPE': 'VARCHAR',
             'LATITUDE': 'FLOAT',
             'LONGITUDE': 'FLOAT',
             'OBSERVATION DATE': 'DATE',
-            'TIME OBSERVATIONS STARTED': 'VARCHAR',
-            'OBSERVER ID': 'VARCHAR',
+            --'TIME OBSERVATIONS STARTED': 'VARCHAR',
+            --'OBSERVER ID': 'VARCHAR',
             'SAMPLING EVENT IDENTIFIER': 'VARCHAR',
             'OBSERVATION TYPE': 'VARCHAR',
-            'DURATION MINUTES': 'INT',
-            'EFFORT DISTANCE KM': 'FLOAT',
-            'NUMBER OBSERVERS': 'INT',
+            --'DURATION MINUTES': 'INT',
+            --'EFFORT DISTANCE KM': 'FLOAT',
+            --'NUMBER OBSERVERS': 'INT',
             'ALL SPECIES REPORTED': 'BOOLEAN',
             'GROUP IDENTIFIER': 'VARCHAR'
         }})
+),
+
+sightings_staging AS (
+    SELECT
+        --TRY_CAST(REGEXP_EXTRACT("GLOBAL UNIQUE IDENTIFIER", '(\\d+)$') AS BIGINT) AS global_id,
+        --TRY_CAST("LAST EDITED DATE" AS DATE) AS last_edited_date,
+        --"TAXONOMIC ORDER" as taxonomic_order,
+        "CATEGORY" as species_category,
+        "COMMON NAME" as common_name,
+        "SCIENTIFIC NAME" as scientific_name,
+        TRY_CAST("OBSERVATION COUNT" AS INT) AS observation_count,
+        "COUNTRY" as country,
+        --"COUNTRY CODE" as country_code,
+        "STATE" as state,
+        "STATE CODE" as state_code,
+        "COUNTY" as county,
+        --"COUNTY CODE" as county_code,
+        "LOCALITY" as locality,
+        TRY_CAST(REGEXP_EXTRACT("LOCALITY ID", '(\\d+)$') AS BIGINT) AS locality_id,
+        "LOCALITY TYPE" as locality_type,
+        "LATITUDE" as latitude,
+        "LONGITUDE" as longitude,
+        "OBSERVATION DATE" as observation_date,
+        --TRY_CAST("TIME OBSERVATIONS STARTED" AS TIME) AS time_observations_started,
+        --TRY_CAST(REGEXP_EXTRACT("OBSERVER ID", '(\\d+)$') AS BIGINT) AS observer_id,
+        TRY_CAST(REGEXP_EXTRACT("SAMPLING EVENT IDENTIFIER", '(\\d+)$') AS BIGINT) AS sampling_id,
+        "OBSERVATION TYPE" as observation_type,
+        --"DURATION MINUTES"::INT AS duration_minutes,
+        --"EFFORT DISTANCE KM"::FLOAT AS effort_distance_km,
+        --"NUMBER OBSERVERS"::INT AS number_observers,
+        "ALL SPECIES REPORTED" as all_species_reported,
+        TRY_CAST(REGEXP_EXTRACT("GROUP IDENTIFIER", '(\\d+)$') AS BIGINT) AS group_id
+    FROM sightings_raw
+    WHERE "LOCALITY TYPE" = 'H' AND
+        ("CATEGORY" IN ('species', 'issf', 'form', 'domestic')) AND
+        "ALL SPECIES REPORTED" IS TRUE
+),
+
+-- deduplicate group checklists
+sightings_clean AS (
+    SELECT *
+    FROM (
+        SELECT *,
+            ROW_NUMBER() OVER (
+                PARTITION BY group_id, common_name
+                ORDER BY sampling_id
+            ) as row_num
+        FROM sightings_staging
+    ) t
+    WHERE group_id IS NULL or row_num = 1
+),
+
+-- count years each species observed at each hotspot to identify one-off vagrants
+hotspot_vagrants AS (
+    SELECT
+        locality_id,
+        common_name,
+        COUNT(DISTINCT EXTRACT(YEAR FROM observation_date)) AS years_observed
+    FROM sightings_clean
+    GROUP BY common_name, locality_id
 )
-SELECT
-    TRY_CAST(REGEXP_EXTRACT("GLOBAL UNIQUE IDENTIFIER", '(\\d+)$') AS BIGINT) AS global_id,
-    TRY_CAST("LAST EDITED DATE" AS DATE) AS last_edited_date,
-    "TAXONOMIC ORDER" as taxonomic_order,
-    "CATEGORY" as species_category,
-    "COMMON NAME" as common_name,
-    "SCIENTIFIC NAME" as scientific_name,
-    TRY_CAST("OBSERVATION COUNT" AS INT) AS observation_count,
-    "COUNTRY" as country,
-    "COUNTRY CODE" as country_code,
-    "STATE" as state,
-    "STATE CODE" as state_code,
-    "COUNTY" as county,
-    "COUNTY CODE" as county_code,
-    "LOCALITY" as locality,
-    TRY_CAST(REGEXP_EXTRACT("LOCALITY ID", '(\\d+)$') AS BIGINT) AS locality_id,
-    "LOCALITY TYPE" as locality_type,
-    "LATITUDE"::FLOAT AS latitude,
-    "LONGITUDE"::FLOAT AS longitude,
-    TRY_CAST("OBSERVATION DATE" AS DATE) AS observation_date,
-    TRY_CAST("TIME OBSERVATIONS STARTED" AS TIME) AS time_observations_started,
-    TRY_CAST(REGEXP_EXTRACT("OBSERVER ID", '(\\d+)$') AS BIGINT) AS observer_id,
-    TRY_CAST(REGEXP_EXTRACT("SAMPLING EVENT IDENTIFIER", '(\\d+)$') AS BIGINT) AS sampling_id,
-    "OBSERVATION TYPE" as observation_type,
-    "DURATION MINUTES"::INT AS duration_minutes,
-    "EFFORT DISTANCE KM"::FLOAT AS effort_distance_km,
-    "NUMBER OBSERVERS"::INT AS number_observers,
-    "ALL SPECIES REPORTED"::BOOLEAN as all_species_reported,
-    TRY_CAST(REGEXP_EXTRACT("GROUP IDENTIFIER", '(\\d+)$') AS BIGINT) AS group_id
-FROM sightings_raw
-WHERE "LOCALITY TYPE" = 'H' AND
-    ("CATEGORY" IN ('species', 'issf', 'form', 'domestic')) AND
-    "ALL SPECIES REPORTED" IS TRUE
-;
-""")
 
-print("\nDeduplicating observations...")
-# drop duplicate observations from group checklists
-con.execute("""--sql
-DROP TABLE IF EXISTS sightings_clean;
-CREATE TABLE sightings_clean AS
-SELECT *
-FROM (
-    SELECT *,
-        ROW_NUMBER() OVER (
-            PARTITION BY group_id, common_name
-            ORDER BY sampling_id --figure out something else to order by?
-        ) as row_num
-    FROM sightings_staging
-) t
-WHERE group_id IS NULL or row_num = 1
-;
-""")
-
-print("\nFiltering out one-off vagrants...")
-# count number of year each species was observed in each hotspot to identify one-off vagrants
-con.execute("""--sql
-DROP TABLE IF EXISTS hotspot_vagrants;
-CREATE TABLE hotspot_vagrants AS
+-- filter out one-off vagrants, keep only fields used downstream
 SELECT
-    locality_id,
-    common_name,
-    COUNT(DISTINCT EXTRACT(YEAR FROM observation_date)) AS years_observed
-FROM sightings_clean
-GROUP BY common_name, locality_id
-;
-""")
-
-# filter out one-off vagrants from sightings
-con.execute("""--sql
-DROP TABLE IF EXISTS sightings_filtered;
-CREATE TABLE sightings_filtered AS
-SELECT
-    s.*
+    s.common_name,
+    s.locality,
+    s.locality_id,
+    s.latitude,
+    s.longitude,
+    s.observation_date,
+    s.sampling_id,
+    s.country,
+    s.county,
+    s.state,
+    s.state_code
 FROM sightings_clean s
 JOIN hotspot_vagrants h
     ON s.locality_id = h.locality_id
     AND s.common_name = h.common_name
-    WHERE h.years_observed > 2 -- only keep species observed at a hotspot in more than 2 years - eliminates one-off vagrants
+WHERE h.years_observed > 2
 ;
 """)
+
+print("\nBuilding hotspots lookup table...")
+con.execute("""--sql
+DROP TABLE IF EXISTS hotspots;
+CREATE TABLE hotspots AS
+SELECT
+    locality_id,
+    ANY_VALUE(locality) AS locality,
+    AVG(latitude) AS latitude,
+    AVG(longitude) AS longitude,
+    ANY_VALUE(country) AS country,
+    ANY_VALUE(county) AS county,
+    ANY_VALUE(state) AS state,
+    ANY_VALUE(state_code) AS state_code,
+    COUNT(DISTINCT sampling_id) AS total_checklists
+FROM sightings_filtered
+GROUP BY locality_id;
+""")
+print("{} hotspots".format(con.execute("SELECT COUNT(*) FROM hotspots").fetchone()[0]))
 
 print("\nCalculating checklist and detection counts...")
 # group checklists and sighting counts by locality, date, and species
@@ -246,23 +266,6 @@ SELECT
 ;
 """)
 
-print("\nBuilding hotspots lookup table...")
-con.execute("""--sql
-DROP TABLE IF EXISTS hotspots;
-CREATE TABLE hotspots AS
-SELECT
-    locality_id,
-    ANY_VALUE(locality) AS locality,
-    AVG(latitude) AS latitude,
-    AVG(longitude) AS longitude,
-    ANY_VALUE(country) AS country,
-    ANY_VALUE(county) AS county,
-    ANY_VALUE(state) AS state,
-    ANY_VALUE(state_code) AS state_code,
-    COUNT(DISTINCT sampling_id) AS total_checklists
-FROM sightings_clean
-GROUP BY locality_id;
-""")
-print("{} hotspots".format(con.execute("SELECT COUNT(*) FROM hotspots").fetchone()[0]))
+
 
 print("\nDone.")
