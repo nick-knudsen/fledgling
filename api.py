@@ -27,7 +27,7 @@ app = FastAPI(title="Listr")
 
 
 class OptimizeRequest(BaseModel):
-    life_list: list[str]
+    life_list: list[str] = []
     start_date: date
     end_date: date
     k: int = 5
@@ -37,6 +37,7 @@ class OptimizeRequest(BaseModel):
     center_lat: float | None = None
     center_lon: float | None = None
     max_driving_minutes: int | None = None
+    target_species: str | None = None
 
 
 def fetch_recent_species(locality_id: int) -> set[str]:
@@ -235,6 +236,7 @@ def run_optimization(req: OptimizeRequest):
         states=req.states,
         country=req.country,
         locality_ids=locality_ids,
+        target_species=req.target_species,
     )
 
     hotspots = [

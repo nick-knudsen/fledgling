@@ -34,6 +34,7 @@ class OptimizationResult:
     date_range: tuple[date, date]
     geographic_filter: str
     species_combined_probs: list[SpeciesProb]
+    num_total_hotspots: int = 0
 
 
 def date_range_to_days_of_year(start_date: date, end_date: date) -> list[int]:
@@ -59,6 +60,7 @@ def load_probability_matrix(
     states: Optional[list[str]] = None,
     country: Optional[str] = None,
     locality_ids: Optional[list[int]] = None,
+    target_species: Optional[str] = None,
 ) -> tuple[pd.DataFrame, np.ndarray, list[str]]:
     """Load and prepare the probability matrix from the database.
 
@@ -69,10 +71,6 @@ def load_probability_matrix(
         prob_matrix: numpy array shape (num_hotspots, num_species)
         species_list: list of species names (columns of prob_matrix)
     """
-    # Register life list as a temporary view (no data written to disk)
-    life_df = pd.DataFrame({"common_name": life_list_names})
-    con.register("life_list_view", life_df)
-
     day_list = ", ".join(str(d) for d in days_of_year)
 
     geo_filter = "1=1"
@@ -88,6 +86,13 @@ def load_probability_matrix(
     elif country:
         geo_filter = f"h.country = '{country}'"
 
+    if target_species:
+        species_filter = f"r.common_name = '{target_species.replace(chr(39), chr(39)+chr(39))}'"
+    else:
+        life_df = pd.DataFrame({"common_name": life_list_names})
+        con.register("life_list_view", life_df)
+        species_filter = "r.common_name NOT IN (SELECT common_name FROM life_list_view)"
+
     query = f"""
     WITH filtered_freq AS (
         SELECT
@@ -97,7 +102,7 @@ def load_probability_matrix(
         FROM rolling_avg_freq r
         JOIN hotspots h ON r.locality_id = h.locality_id
         WHERE r.day_of_year IN ({day_list})
-          AND r.common_name NOT IN (SELECT common_name FROM life_list_view)
+          AND {species_filter}
           AND {geo_filter}
         GROUP BY r.locality_id, r.common_name
     )
@@ -117,7 +122,8 @@ def load_probability_matrix(
 
     df = con.execute(query).fetchdf()
 
-    con.unregister("life_list_view")
+    if not target_species:
+        con.unregister("life_list_view")
 
     if df.empty:
         empty_info = pd.DataFrame(columns=["locality", "locality_id", "latitude", "longitude", "county"])
@@ -193,6 +199,7 @@ def optimize_hotspots(
     states: Optional[list[str]] = None,
     country: Optional[str] = None,
     locality_ids: Optional[list[int]] = None,
+    target_species: Optional[str] = None,
 ) -> OptimizationResult:
     """Main entry point for the hotspot optimizer."""
     days_of_year = date_range_to_days_of_year(start_date, end_date)
@@ -211,7 +218,7 @@ def optimize_hotspots(
         hotspot_info, prob_matrix, species_list = load_probability_matrix(
             con, days_of_year, life_list_names,
             counties=counties, states=states, country=country,
-            locality_ids=locality_ids,
+            locality_ids=locality_ids, target_species=target_species,
         )
     finally:
         con.close()

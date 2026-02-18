@@ -619,12 +619,24 @@ document.getElementById("optimize-btn").addEventListener("click", async () => {
     btn.disabled = true;
     btn.textContent = "Optimizing...";
 
+    if (targetMode === "search" && !selectedSpecies) {
+        alert("Please select a species first.");
+        btn.disabled = false;
+        btn.textContent = "Optimize";
+        return;
+    }
+
     const body = {
-        life_list: lifeList,
         start_date: getDateValue("start"),
         end_date: getDateValue("end"),
         k: parseInt(document.getElementById("k-input").value),
     };
+
+    if (targetMode === "search") {
+        body.target_species = selectedSpecies.comName;
+    } else {
+        body.life_list = lifeList;
+    }
 
     if (searchMode === "driving") {
         if (centerLat == null || centerLon == null) {
@@ -676,8 +688,11 @@ document.getElementById("optimize-btn").addEventListener("click", async () => {
 function renderResults(data) {
     const el = document.getElementById("results");
 
+    const isSearch = targetMode === "search";
+    const noun = isSearch ? "targets" : "lifers";
+
     if (!data.hotspots || data.hotspots.length === 0) {
-        el.innerHTML = `<div class="empty-state"><p>No potential lifers found for this area and date range.</p></div>`;
+        el.innerHTML = `<div class="empty-state"><p>No potential ${noun} found for this area and date range.</p></div>`;
         return;
     }
 
@@ -685,16 +700,18 @@ function renderResults(data) {
         <div class="metrics">
             <div class="metric-card">
                 <div class="value">${data.total_expected_lifers}</div>
-                <div class="label">Expected lifers</div>
+                <div class="label">Expected ${noun}</div>
             </div>
             <div class="metric-card">
                 <div class="value">${data.num_candidate_hotspots}</div>
                 <div class="label">Hotspots evaluated</div>
             </div>
+            ${isSearch ? "" : `
             <div class="metric-card">
                 <div class="value">${data.num_potential_lifers}</div>
                 <div class="label">Potential lifers</div>
             </div>
+            `}
         </div>
         <div id="map"></div>
         <div class="section-title">Recommended Hotspots</div>
@@ -717,7 +734,7 @@ function renderResults(data) {
                 <div class="hotspot-header">
                     <span class="rank">${h.rank}</span>
                     <span class="name">${h.locality}</span>
-                    <span class="gain">+${h.marginal_gain.toFixed(2)} lifers</span>
+                    <span class="gain">+${h.marginal_gain.toFixed(2)} ${noun}</span>
                 </div>
                 <div class="hotspot-body">
                     <div class="hotspot-meta">
@@ -748,7 +765,7 @@ function renderResults(data) {
         `).join("");
 
         html += `
-            <div class="section-title" style="margin-top: 1.5rem;">All Potential Lifers (Combined Probability)</div>
+            <div class="section-title" style="margin-top: 1.5rem;">All Potential ${isSearch ? "Targets" : "Lifers"} (Combined Probability)</div>
             <div class="hotspot-card">
                 <div style="padding: 1rem 1.25rem;">
                     <table>
@@ -884,6 +901,7 @@ function selectSpecies(sp) {
     selectedSpecies = sp;
     speciesInput.value = sp.comName;
     speciesDropdown.classList.remove("open");
+    document.getElementById("optimize-btn").disabled = false;
 }
 
 speciesInput.addEventListener("input", () => {
