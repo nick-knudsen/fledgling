@@ -208,8 +208,8 @@ ORDER BY c.locality_id, c.day_of_year DESC
 print("\nCalculating frequencies...")
 # calculate rolling average observations, checklists, frequency, and wilson lower bound CI 
 con.execute("""--sql
-DROP TABLE IF EXISTS rolling_avg_freq;
-CREATE TABLE rolling_avg_freq AS
+DROP TABLE IF EXISTS rolling_wilson_score;
+CREATE TABLE rolling_wilson_score AS
 WITH wrapped AS (
     SELECT
         *,
@@ -250,9 +250,9 @@ SELECT
     locality_id,
     day_of_year,
     common_name,
-    k::INT AS rolling_detections,
-    n::INT AS rolling_checklists,
-    k::DOUBLE / n AS rolling_freq,
+    --k::INT AS rolling_detections,
+    --n::INT AS rolling_checklists,
+    --k::DOUBLE / n AS rolling_freq,
     ((k::DOUBLE / n)
         + (1.64 * 1.64) / (2 * n)
         - 1.64 * SQRT(

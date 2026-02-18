@@ -3,7 +3,7 @@ import os
 import duckdb
 
 OUTPUT_DB = "data/combined.duckdb"
-TABLES = ["hotspots", "rolling_avg_freq"]
+TABLES = ["hotspots", "rolling_wilson_score"]
 
 state_dbs = sorted(
     f for f in glob.glob("data/dbs/*.duckdb")

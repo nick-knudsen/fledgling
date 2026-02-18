@@ -99,7 +99,7 @@ def load_probability_matrix(
             r.locality_id,
             r.common_name,
             MAX(GREATEST(r.wilson_lower_bound, 0)) AS detection_prob
-        FROM rolling_avg_freq r
+        FROM rolling_wilson_score r
         JOIN hotspots h ON r.locality_id = h.locality_id
         WHERE r.day_of_year IN ({day_list})
           AND {species_filter}
