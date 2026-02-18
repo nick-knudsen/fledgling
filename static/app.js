@@ -189,32 +189,52 @@ function refreshCountyDropdown() {
     updateMultiSelectDisplay("county", selectedCounties, "All counties");
 }
 
+let multiSelectActive = {}; // id -> boolean
+
 function populateMultiSelect(id, items, selectedSet, onChange) {
     if (!Array.isArray(items)) items = [];
+    multiSelectActive[id] = false;
     const dropdown = document.getElementById(`${id}-dropdown`);
     dropdown.innerHTML = "";
 
+    const defaultText = id === "county" ? "All counties" : (id === "state" ? "All states/provinces" : "World (all countries)");
+
     const actions = document.createElement("div");
     actions.className = "multi-select-actions";
-    actions.innerHTML = `<button data-action="all">Select all</button><button data-action="none">Select none</button>`;
+    const multiBtn = document.createElement("button");
+    multiBtn.textContent = "Select Multiple";
+    multiBtn.dataset.action = "multi";
+    const allNoneBtn = document.createElement("button");
+    allNoneBtn.textContent = "Select All / None";
+    allNoneBtn.dataset.action = "allnone";
+    actions.appendChild(multiBtn);
+    actions.appendChild(allNoneBtn);
     dropdown.appendChild(actions);
 
-    actions.querySelector("[data-action='all']").addEventListener("click", (e) => {
+    multiBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        dropdown.querySelectorAll(".multi-select-item").forEach(item => {
-            selectedSet.add(item.dataset.value);
-            item.classList.add("selected");
-        });
-        updateMultiSelectDisplay(id, selectedSet, `All ${id === "county" ? "counties" : id + "s"}`);
-        onChange();
+        multiSelectActive[id] = !multiSelectActive[id];
+        multiBtn.classList.toggle("active", multiSelectActive[id]);
     });
-    actions.querySelector("[data-action='none']").addEventListener("click", (e) => {
+
+    allNoneBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        selectedSet.clear();
-        dropdown.querySelectorAll(".multi-select-item").forEach(item => {
-            item.classList.remove("selected");
-        });
-        updateMultiSelectDisplay(id, selectedSet, `All ${id === "county" ? "counties" : id + "s"}`);
+        if (!multiSelectActive[id]) {
+            multiSelectActive[id] = true;
+            multiBtn.classList.add("active");
+        }
+        if (selectedSet.size > 0) {
+            selectedSet.clear();
+            dropdown.querySelectorAll(".multi-select-item").forEach(item => {
+                item.classList.remove("selected");
+            });
+        } else {
+            dropdown.querySelectorAll(".multi-select-item").forEach(item => {
+                selectedSet.add(item.dataset.value);
+                item.classList.add("selected");
+            });
+        }
+        updateMultiSelectDisplay(id, selectedSet, defaultText);
         onChange();
     });
 
@@ -226,14 +246,22 @@ function populateMultiSelect(id, items, selectedSet, onChange) {
         item.innerHTML = `<span>${val}</span><span class="check">✓</span>`;
         item.addEventListener("click", (e) => {
             e.stopPropagation();
-            if (selectedSet.has(val)) {
-                selectedSet.delete(val);
-                item.classList.remove("selected");
+            if (multiSelectActive[id]) {
+                if (selectedSet.has(val)) {
+                    selectedSet.delete(val);
+                    item.classList.remove("selected");
+                } else {
+                    selectedSet.add(val);
+                    item.classList.add("selected");
+                }
             } else {
+                selectedSet.clear();
+                dropdown.querySelectorAll(".multi-select-item").forEach(el => el.classList.remove("selected"));
                 selectedSet.add(val);
                 item.classList.add("selected");
+                dropdown.classList.remove("open");
             }
-            updateMultiSelectDisplay(id, selectedSet, `All ${id === "county" ? "counties" : id + "s"}`);
+            updateMultiSelectDisplay(id, selectedSet, defaultText);
             onChange();
         });
         dropdown.appendChild(item);
@@ -382,6 +410,17 @@ document.getElementById("use-my-location").addEventListener("click", () => {
         },
         { timeout: 10000 }
     );
+});
+
+// Scroll wheel adjusts driving time
+document.getElementById("max-driving-minutes").addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const input = e.currentTarget;
+    const step = e.shiftKey ? 10 : 1;
+    const delta = e.deltaY < 0 ? step : -step;
+    const current = parseInt(input.value) || 0;
+    const next = Math.max(1, Math.min(480, current + delta));
+    input.value = next;
 });
 
 locationInput.addEventListener("blur", () => {
