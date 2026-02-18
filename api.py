@@ -38,6 +38,7 @@ class OptimizeRequest(BaseModel):
     center_lon: float | None = None
     max_driving_minutes: int | None = None
     target_species: str | None = None
+    exclude_locality_ids: list[int] | None = None
 
 
 def fetch_recent_species(locality_id: int) -> set[str]:
@@ -237,6 +238,7 @@ def run_optimization(req: OptimizeRequest):
         country=req.country,
         locality_ids=locality_ids,
         target_species=req.target_species,
+        exclude_locality_ids=req.exclude_locality_ids,
     )
 
     hotspots = [

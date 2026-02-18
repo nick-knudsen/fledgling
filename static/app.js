@@ -656,7 +656,15 @@ function parseCSVLine(line) {
 }
 
 // Run optimization
+let lastRequestBody = null;
+let excludedLocalityIds = [];
+
 document.getElementById("optimize-btn").addEventListener("click", async () => {
+    excludedLocalityIds = [];
+    await runOptimization();
+});
+
+async function runOptimization() {
     const btn = document.getElementById("optimize-btn");
     btn.disabled = true;
     btn.textContent = "Optimizing...";
@@ -706,6 +714,12 @@ document.getElementById("optimize-btn").addEventListener("click", async () => {
         body.country = counties.length === 0 && states.length === 0 && countries.length === 1 ? countries[0] : null;
     }
 
+    if (excludedLocalityIds.length > 0) {
+        body.exclude_locality_ids = excludedLocalityIds;
+    }
+
+    lastRequestBody = body;
+
     try {
         const resp = await fetch("/api/optimize", {
             method: "POST",
@@ -725,13 +739,13 @@ document.getElementById("optimize-btn").addEventListener("click", async () => {
         btn.disabled = false;
         btn.textContent = "Optimize";
     }
-});
+}
 
 function renderResults(data) {
     const el = document.getElementById("results");
 
     const isSearch = targetMode === "search";
-    const noun = isSearch ? "targets" : "lifers";
+    const noun = (!isSearch && listType === "life") ? "lifers" : "targets";
 
     if (!data.hotspots || data.hotspots.length === 0) {
         el.innerHTML = `<div class="empty-state"><p>No potential ${noun} found for this area and date range.</p></div>`;
@@ -751,12 +765,18 @@ function renderResults(data) {
             ${isSearch ? "" : `
             <div class="metric-card">
                 <div class="value">${data.num_potential_lifers}</div>
-                <div class="label">Potential lifers</div>
+                <div class="label">Potential ${noun}</div>
             </div>
             `}
         </div>
         <div id="map"></div>
-        <div class="section-title">Recommended Hotspots</div>
+        <div class="section-title-row">
+            <div class="section-title">Recommended Hotspots</div>
+            <div class="expand-collapse-btns">
+                <button class="expand-collapse-btn" id="expand-all-btn">Expand All</button>
+                <button class="expand-collapse-btn" id="collapse-all-btn">Collapse All</button>
+            </div>
+        </div>
     `;
 
     data.hotspots.forEach(h => {
@@ -776,14 +796,18 @@ function renderResults(data) {
                 <div class="hotspot-header">
                     <span class="rank">${h.rank}</span>
                     <span class="name">${h.locality}</span>
-                    <span class="gain">+${h.marginal_gain.toFixed(2)} ${noun}</span>
+                    <span class="gain-group">
+                        <span class="gain">+${h.target_species.reduce((sum, sp) => sum + sp.probability, 0).toFixed(2)} ${noun}</span>
+                        <span class="gain-marginal">+${h.marginal_gain.toFixed(2)} marginal</span>
+                    </span>
                 </div>
                 <div class="hotspot-body">
                     <div class="hotspot-meta">
                         ${h.county} &middot;
                         ${h.latitude.toFixed(4)}, ${h.longitude.toFixed(4)} &middot;
                         <a href="https://ebird.org/hotspot/L${h.locality_id}" target="_blank" rel="noopener">View on eBird</a> &middot;
-                        <a href="https://www.google.com/maps/search/${encodeURIComponent(h.locality)}/@${h.latitude},${h.longitude},15z" target="_blank" rel="noopener">View on Google Maps</a>
+                        <a href="https://www.google.com/maps/search/${encodeURIComponent(h.locality)}/@${h.latitude},${h.longitude},15z" target="_blank" rel="noopener">View on Google Maps</a> &middot;
+                        <a href="#" class="exclude-btn" data-locality-id="${h.locality_id}">Exclude &amp; Recalculate</a>
                     </div>
                     <table>
                         <thead><tr><th>Species</th><th>Detection Probability</th><th>Observed in Last 30 Days?</th></tr></thead>
@@ -860,6 +884,23 @@ function renderResults(data) {
         header.addEventListener("click", () => toggleHotspotBody(rank));
         card.addEventListener("mouseenter", () => highlightHotspot(rank, true));
         card.addEventListener("mouseleave", () => highlightHotspot(rank, false));
+    });
+
+    document.querySelectorAll(".exclude-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const localityId = parseInt(btn.dataset.localityId);
+            excludedLocalityIds.push(localityId);
+            runOptimization();
+        });
+    });
+
+    document.getElementById("expand-all-btn").addEventListener("click", () => {
+        document.querySelectorAll(".hotspot-card[data-rank] .hotspot-body").forEach(b => b.classList.add("open"));
+    });
+    document.getElementById("collapse-all-btn").addEventListener("click", () => {
+        document.querySelectorAll(".hotspot-card[data-rank] .hotspot-body").forEach(b => b.classList.remove("open"));
     });
 }
 
