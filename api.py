@@ -1,10 +1,14 @@
 import csv
+import math
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 from urllib.request import Request, urlopen
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 import duckdb
 from fastapi import FastAPI
@@ -30,6 +34,9 @@ class OptimizeRequest(BaseModel):
     counties: list[str] | None = None
     states: list[str] | None = None
     country: str | None = None
+    center_lat: float | None = None
+    center_lon: float | None = None
+    max_driving_minutes: int | None = None
 
 
 def fetch_recent_species(locality_id: int) -> set[str]:
@@ -97,7 +104,7 @@ _taxonomy_cache: list[dict] | None = None
 
 @app.get("/api/species")
 def get_species():
-    """Return bird species from the species table (cached in memory)."""
+    """Return bird species from the species table."""
     global _taxonomy_cache
     if _taxonomy_cache is None:
         con = duckdb.connect(DB_PATH, read_only=True)
@@ -105,7 +112,7 @@ def get_species():
             rows = con.execute(
                 "SELECT species_code, common_name, scientific_name, category, "
                 "banding_codes, com_name_codes, sci_name_codes "
-                "FROM species WHERE category != 'issf' ORDER BY taxon_order"
+                "FROM species WHERE category == 'species' ORDER BY taxon_order"
             ).fetchall()
         finally:
             con.close()
@@ -123,6 +130,80 @@ def get_species():
     return _taxonomy_cache
 
 
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in km between two points."""
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def osrm_filter_hotspots(
+    center_lat: float,
+    center_lon: float,
+    max_minutes: int,
+) -> list[int]:
+    """Filter hotspots by driving time using the public OSRM API.
+
+    1. Load all hotspot coords from DB
+    2. Pre-filter by crow-flies radius (max_minutes * 2 km)
+    3. Call OSRM table API in batches to get actual driving times
+    4. Return locality_ids within max_minutes
+    """
+    con = duckdb.connect(DB_PATH, read_only=True)
+    try:
+        rows = con.execute(
+            "SELECT locality_id, latitude, longitude FROM hotspots"
+        ).fetchall()
+    finally:
+        con.close()
+
+    # Pre-filter by crow-flies distance
+    radius_km = max_minutes * 2.0
+    candidates = []
+    for lid, lat, lon in rows:
+        if haversine_km(center_lat, center_lon, lat, lon) <= radius_km:
+            candidates.append((lid, lat, lon))
+
+    if not candidates:
+        return []
+
+    # Call OSRM table API in batches of 100
+    BATCH_SIZE = 100
+    result_ids = []
+
+    for i in range(0, len(candidates), BATCH_SIZE):
+        batch = candidates[i:i + BATCH_SIZE]
+        coords_str = f"{center_lon},{center_lat}"
+        for _, lat, lon in batch:
+            coords_str += f";{lon},{lat}"
+
+        url = (
+            f"https://router.project-osrm.org/table/v1/driving/{coords_str}"
+            f"?sources=0&annotations=duration"
+        )
+        req = Request(url, headers={"User-Agent": "Listr/1.0"})
+        try:
+            with urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read())
+        except Exception as e:
+            logger.warning(f"OSRM API error for batch {i}: {e}")
+            continue
+
+        if data.get("code") != "Ok":
+            logger.warning(f"OSRM returned non-Ok: {data.get('code')}")
+            continue
+
+        durations = data["durations"][0]  # single source row
+        max_seconds = max_minutes * 60
+        for j, dur in enumerate(durations[1:]):  # skip source-to-source (index 0)
+            if dur is not None and dur <= max_seconds:
+                result_ids.append(batch[j][0])
+
+    return result_ids
+
+
 @app.post("/api/optimize")
 def run_optimization(req: OptimizeRequest):
     """Run the hotspot optimization.
@@ -130,6 +211,20 @@ def run_optimization(req: OptimizeRequest):
     The client sends the user's life list (species names) along with
     the search parameters. No user data is stored on the server.
     """
+    locality_ids = None
+    if req.center_lat is not None and req.center_lon is not None and req.max_driving_minutes is not None:
+        locality_ids = osrm_filter_hotspots(req.center_lat, req.center_lon, req.max_driving_minutes)
+        if not locality_ids:
+            return {
+                "total_expected_lifers": 0,
+                "num_candidate_hotspots": 0,
+                "num_potential_lifers": 0,
+                "date_range": [req.start_date.isoformat(), req.end_date.isoformat()],
+                "geographic_filter": f"Within {req.max_driving_minutes} min drive",
+                "hotspots": [],
+                "species_combined_probs": [],
+            }
+
     result = optimize_hotspots(
         db_path=DB_PATH,
         life_list_names=req.life_list,
@@ -139,6 +234,7 @@ def run_optimization(req: OptimizeRequest):
         counties=req.counties,
         states=req.states,
         country=req.country,
+        locality_ids=locality_ids,
     )
 
     hotspots = [

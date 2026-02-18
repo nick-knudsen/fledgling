@@ -108,6 +108,13 @@ fetch("/api/region-names")
     .then(r => r.json())
     .then(data => { regionNames = data; });
 
+let searchMode = "region"; // "region" or "driving"
+let centerLat = null;
+let centerLon = null;
+let locationName = null;
+let nominatimTimeout = null;
+let activeLocationIndex = -1;
+
 let searchAreas = {}; // country -> { state -> [counties] }
 let selectedCountries = new Set();
 let selectedStates = new Set();
@@ -246,6 +253,106 @@ document.addEventListener("click", (e) => {
         if (!select.contains(e.target)) {
             document.getElementById(`${id}-dropdown`).classList.remove("open");
         }
+    }
+});
+
+// Search mode toggle (region / driving)
+document.querySelectorAll(".search-mode-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll(".search-mode-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        searchMode = btn.dataset.mode;
+        document.getElementById("region-inputs").style.display = searchMode === "region" ? "" : "none";
+        document.getElementById("driving-inputs").style.display = searchMode === "driving" ? "" : "none";
+    });
+});
+
+// Nominatim location search
+const locationInput = document.getElementById("location-input");
+const locationDropdown = document.getElementById("location-dropdown");
+const locationSelected = document.getElementById("location-selected");
+
+locationInput.addEventListener("input", () => {
+    const q = locationInput.value.trim();
+    if (q.length < 3) {
+        locationDropdown.classList.remove("open");
+        return;
+    }
+    clearTimeout(nominatimTimeout);
+    nominatimTimeout = setTimeout(() => fetchLocationSuggestions(q), 300);
+});
+
+async function fetchLocationSuggestions(query) {
+    try {
+        const resp = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`,
+            { headers: { "Accept-Language": "en" } }
+        );
+        const results = await resp.json();
+        renderLocationDropdown(results);
+    } catch (err) {
+        locationDropdown.classList.remove("open");
+    }
+}
+
+function renderLocationDropdown(results) {
+    locationDropdown.innerHTML = "";
+    activeLocationIndex = -1;
+
+    if (results.length === 0) {
+        locationDropdown.classList.remove("open");
+        return;
+    }
+
+    results.forEach((r) => {
+        const item = document.createElement("div");
+        item.className = "location-dropdown-item";
+        item.textContent = r.display_name;
+        item.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            selectLocation(r);
+        });
+        locationDropdown.appendChild(item);
+    });
+    locationDropdown.classList.add("open");
+}
+
+function selectLocation(result) {
+    centerLat = parseFloat(result.lat);
+    centerLon = parseFloat(result.lon);
+    locationName = result.display_name;
+    locationInput.value = result.display_name;
+    locationDropdown.classList.remove("open");
+    locationSelected.textContent = `${centerLat.toFixed(4)}, ${centerLon.toFixed(4)}`;
+}
+
+locationInput.addEventListener("keydown", (e) => {
+    const items = locationDropdown.querySelectorAll(".location-dropdown-item");
+    if (!items.length) return;
+
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        activeLocationIndex = Math.min(activeLocationIndex + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle("active", i === activeLocationIndex));
+        items[activeLocationIndex].scrollIntoView({ block: "nearest" });
+    } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        activeLocationIndex = Math.max(activeLocationIndex - 1, 0);
+        items.forEach((el, i) => el.classList.toggle("active", i === activeLocationIndex));
+        items[activeLocationIndex].scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter" && activeLocationIndex >= 0) {
+        e.preventDefault();
+        items[activeLocationIndex].dispatchEvent(new MouseEvent("mousedown"));
+    }
+});
+
+locationInput.addEventListener("blur", () => {
+    locationDropdown.classList.remove("open");
+});
+
+locationInput.addEventListener("focus", () => {
+    if (locationDropdown.children.length > 0) {
+        locationDropdown.classList.add("open");
     }
 });
 
@@ -474,18 +581,38 @@ document.getElementById("optimize-btn").addEventListener("click", async () => {
     btn.disabled = true;
     btn.textContent = "Optimizing...";
 
-    const counties = Array.from(selectedCounties);
-    const states = Array.from(selectedStates);
-    const countries = Array.from(selectedCountries);
     const body = {
         life_list: lifeList,
         start_date: getDateValue("start"),
         end_date: getDateValue("end"),
         k: parseInt(document.getElementById("k-input").value),
-        counties: counties.length > 0 ? counties : null,
-        states: counties.length === 0 && states.length > 0 ? states : null,
-        country: counties.length === 0 && states.length === 0 && countries.length === 1 ? countries[0] : null,
     };
+
+    if (searchMode === "driving") {
+        if (centerLat == null || centerLon == null) {
+            alert("Please select a location first.");
+            btn.disabled = false;
+            btn.textContent = "Optimize";
+            return;
+        }
+        const maxMin = parseInt(document.getElementById("max-driving-minutes").value);
+        if (!maxMin || maxMin < 1) {
+            alert("Please enter a valid driving time.");
+            btn.disabled = false;
+            btn.textContent = "Optimize";
+            return;
+        }
+        body.center_lat = centerLat;
+        body.center_lon = centerLon;
+        body.max_driving_minutes = maxMin;
+    } else {
+        const counties = Array.from(selectedCounties);
+        const states = Array.from(selectedStates);
+        const countries = Array.from(selectedCountries);
+        body.counties = counties.length > 0 ? counties : null;
+        body.states = counties.length === 0 && states.length > 0 ? states : null;
+        body.country = counties.length === 0 && states.length === 0 && countries.length === 1 ? countries[0] : null;
+    }
 
     try {
         const resp = await fetch("/api/optimize", {

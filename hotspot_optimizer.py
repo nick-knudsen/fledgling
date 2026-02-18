@@ -58,6 +58,7 @@ def load_probability_matrix(
     counties: Optional[list[str]] = None,
     states: Optional[list[str]] = None,
     country: Optional[str] = None,
+    locality_ids: Optional[list[int]] = None,
 ) -> tuple[pd.DataFrame, np.ndarray, list[str]]:
     """Load and prepare the probability matrix from the database.
 
@@ -75,7 +76,10 @@ def load_probability_matrix(
     day_list = ", ".join(str(d) for d in days_of_year)
 
     geo_filter = "1=1"
-    if counties:
+    if locality_ids:
+        id_list = ", ".join(str(i) for i in locality_ids)
+        geo_filter = f"h.locality_id IN ({id_list})"
+    elif counties:
         county_list = ", ".join(f"'{c}'" for c in counties)
         geo_filter = f"h.county IN ({county_list})"
     elif states:
@@ -188,6 +192,7 @@ def optimize_hotspots(
     counties: Optional[list[str]] = None,
     states: Optional[list[str]] = None,
     country: Optional[str] = None,
+    locality_ids: Optional[list[int]] = None,
 ) -> OptimizationResult:
     """Main entry point for the hotspot optimizer."""
     days_of_year = date_range_to_days_of_year(start_date, end_date)
@@ -206,6 +211,7 @@ def optimize_hotspots(
         hotspot_info, prob_matrix, species_list = load_probability_matrix(
             con, days_of_year, life_list_names,
             counties=counties, states=states, country=country,
+            locality_ids=locality_ids,
         )
     finally:
         con.close()
