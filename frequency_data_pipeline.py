@@ -21,43 +21,45 @@ print(f"Reading {input_tsv} into {output_db}...")
 con.execute(f"""--sql
 DROP TABLE IF EXISTS sightings_filtered;
 CREATE TABLE sightings_filtered AS
+-- Commenting out currently unneeded columns to speed up processing - can always add them back later
+-- Make sure to comment/uncomment the corrsponding columns in the SELECT statement below as well
 WITH sightings_raw AS (
-    SELECT *
-    FROM read_csv('data/raw/{input_tsv}',
+    SELECT
+        --"GLOBAL UNIQUE IDENTIFIER",
+        --"LAST EDITED DATE",
+        --"TAXONOMIC ORDER",
+        "CATEGORY",
+        "COMMON NAME",
+        --"SCIENTIFIC NAME",
+        "OBSERVATION COUNT",
+        "COUNTRY",
+        --"COUNTRY CODE",
+        "STATE",
+        "STATE CODE",
+        "COUNTY",
+        --"COUNTY CODE",
+        "LOCALITY",
+        "LOCALITY ID",
+        "LOCALITY TYPE",
+        "LATITUDE",
+        "LONGITUDE",
+        "OBSERVATION DATE",
+        --"TIME OBSERVATIONS STARTED",
+        --"OBSERVER ID",
+        "SAMPLING EVENT IDENTIFIER",
+        --"OBSERVATION TYPE",
+        --"DURATION MINUTES",
+        --"EFFORT DISTANCE KM",
+        --"NUMBER OBSERVERS",
+        "ALL SPECIES REPORTED",
+        "GROUP IDENTIFIER"
+    FROM read_csv_auto('data/raw/{input_tsv}',
         delim='\t',
-        header=true,
-        columns={{
-            -- Commenting out currently unneeded columns to speed up processing - can always add them back later
-            -- Make sure to comment/uncomment the corrsponding columns in the SELECT statement below as well
-
-            --'GLOBAL UNIQUE IDENTIFIER': 'VARCHAR',
-            --'LAST EDITED DATE': 'VARCHAR',
-            --'TAXONOMIC ORDER': 'INT',
-            'CATEGORY': 'VARCHAR',
-            'COMMON NAME': 'VARCHAR',
-            --'SCIENTIFIC NAME': 'VARCHAR',
-            'OBSERVATION COUNT': 'VARCHAR',
-            'COUNTRY': 'VARCHAR',
-            --'COUNTRY CODE': 'VARCHAR',
-            'STATE': 'VARCHAR',
-            'STATE CODE': 'VARCHAR',
-            'COUNTY': 'VARCHAR',
-            --'COUNTY CODE': 'VARCHAR',
-            'LOCALITY': 'VARCHAR',
-            'LOCALITY ID': 'VARCHAR',
-            'LOCALITY TYPE': 'VARCHAR',
+        types={{
             'LATITUDE': 'FLOAT',
             'LONGITUDE': 'FLOAT',
             'OBSERVATION DATE': 'DATE',
-            --'TIME OBSERVATIONS STARTED': 'VARCHAR',
-            --'OBSERVER ID': 'VARCHAR',
-            'SAMPLING EVENT IDENTIFIER': 'VARCHAR',
-            --'OBSERVATION TYPE': 'VARCHAR',
-            --'DURATION MINUTES': 'INT',
-            --'EFFORT DISTANCE KM': 'FLOAT',
-            --'NUMBER OBSERVERS': 'INT',
-            'ALL SPECIES REPORTED': 'BOOLEAN',
-            'GROUP IDENTIFIER': 'VARCHAR'
+            'ALL SPECIES REPORTED': 'BOOLEAN'
         }})
 ),
 
@@ -180,7 +182,7 @@ detections AS (
         locality_id,
         DAYOFYEAR(observation_date) AS day_of_year,
         common_name,
-        COUNT(DISTINCT sampling_id) AS total_detections
+        COUNT(sampling_id) AS total_detections -- DISTINCT not needed since we are grouping by common_name
     FROM sightings_filtered
     GROUP BY locality_id, day_of_year, common_name
 ),
@@ -243,10 +245,10 @@ SELECT
     common_name,
     ((k::DOUBLE / n)
         + (1.64 * 1.64) / (2 * n)
-        - 1.64 * SQRT(
+        - 1.64 * SQRT(GREATEST(
             ((k::DOUBLE / n) * (1 - (k::DOUBLE / n)) / n)
             + ((1.64 * 1.64) / (4 * n * n))
-        )
+        , 0))
     )
     /
     (1 + (1.64 * 1.64) / n) AS wilson_lower_bound
