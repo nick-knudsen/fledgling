@@ -2,14 +2,17 @@ import sys
 import duckdb as dk
 
 if len(sys.argv) != 3:
-    print("Usage: python frequency_data_pipeline.py <input_tsv> <output_db>")
-    print("Example: python frequency_data_pipeline.py data/ebd_US-AZ_smp_relDec-2025.txt data/arizona.duckdb")
+    print("Usage: python frequency_data_pipeline.py <region_code> <update_month-year>")
+    print("Example: python frequency_data_pipeline.py US-AZ Dec-2025")
     sys.exit(1)
 
-input_tsv = sys.argv[1]
-output_db = sys.argv[2]
+region_code = sys.argv[1]
+update_month_year = sys.argv[2]
 
-con = dk.connect(output_db)
+input_tsv = f"ebd_{region_code}_smp_rel{update_month_year}.txt"
+output_db = f"{region_code}.duckdb"
+
+con = dk.connect("data/dbs/" + output_db)
 con.execute("PRAGMA enable_print_progress_bar;")
 con.execute("PRAGMA progress_bar_time=500;")  # show after 500ms instead of 2s
 
@@ -21,7 +24,7 @@ DROP TABLE IF EXISTS sightings_raw;
 
 CREATE TABLE sightings_raw AS
 SELECT *
-FROM read_csv_auto('{input_tsv}',
+FROM read_csv_auto('data/raw/{input_tsv}',
     delim='\t', sample_size=-1)
 ;
 """)

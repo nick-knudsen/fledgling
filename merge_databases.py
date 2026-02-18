@@ -6,7 +6,7 @@ OUTPUT_DB = "data/combined.duckdb"
 TABLES = ["hotspots", "rolling_avg_freq"]
 
 state_dbs = sorted(
-    f for f in glob.glob("data/*.duckdb")
+    f for f in glob.glob("data/dbs/*.duckdb")
     if os.path.basename(f) != "combined.duckdb"
 )
 
