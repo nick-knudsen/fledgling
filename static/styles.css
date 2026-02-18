@@ -239,6 +239,23 @@ td { padding: 0.4rem 0; border-bottom: 1px solid var(--border-light); }
 }
 
 .location-search { position: relative; }
+.location-input-row {
+    display: flex; gap: 0;
+}
+.location-input-row input {
+    flex: 1; min-width: 0;
+    border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important;
+    border-right: none !important;
+}
+.location-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 36px; flex-shrink: 0;
+    border: 1px solid var(--input-border); border-left: none;
+    border-radius: 0 6px 6px 0;
+    background: var(--input-bg); color: var(--text-secondary);
+    cursor: pointer; transition: color 0.15s, background 0.15s;
+}
+.location-btn:hover { color: var(--accent); background: var(--hover); }
 .location-dropdown {
     display: none; position: absolute; top: 100%; left: 0; right: 0;
     background: var(--bg-surface); border: 1px solid var(--input-border);

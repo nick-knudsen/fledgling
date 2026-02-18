@@ -346,6 +346,31 @@ locationInput.addEventListener("keydown", (e) => {
     }
 });
 
+document.getElementById("use-my-location").addEventListener("click", () => {
+    if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser.");
+        return;
+    }
+    const btn = document.getElementById("use-my-location");
+    btn.disabled = true;
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            centerLat = pos.coords.latitude;
+            centerLon = pos.coords.longitude;
+            locationName = "Current location";
+            locationInput.value = "Current location";
+            locationDropdown.classList.remove("open");
+            locationSelected.textContent = `${centerLat.toFixed(4)}, ${centerLon.toFixed(4)}`;
+            btn.disabled = false;
+        },
+        (err) => {
+            alert("Could not get your location. Please search manually.");
+            btn.disabled = false;
+        },
+        { timeout: 10000 }
+    );
+});
+
 locationInput.addEventListener("blur", () => {
     locationDropdown.classList.remove("open");
 });
