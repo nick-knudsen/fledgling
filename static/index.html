@@ -23,26 +23,34 @@
     <div class="layout">
         <aside class="sidebar">
             <div class="form-group">
-                <label>Your eBird Data</label>
-                <input type="file" id="csv-input" accept=".csv" />
-                <div id="file-status" class="file-status">Upload your MyEBirdData.csv from eBird</div>
-            </div>
-
-            <div class="form-group">
-                <label>List Scope</label>
+                <label>Target Species...</label>
                 <div class="list-type-toggle">
-                    <button class="list-type-btn active" data-type="life">Life</button>
-                    <button class="list-type-btn" data-type="year">Year</button>
+                    <button class="target-mode-btn active" data-mode="search">By Search</button>
+                    <button class="target-mode-btn" data-mode="lifelist">You Haven't Seen</button>
                 </div>
-                <select id="scope-country" disabled>
-                    <option value="">World (all countries)</option>
-                </select>
-                <select id="scope-state" disabled style="margin-top: 0.4rem;">
-                    <option value="">All states/provinces</option>
-                </select>
-                <select id="scope-county" disabled style="margin-top: 0.4rem;">
-                    <option value="">All counties</option>
-                </select>
+                <div id="target-search-inputs">
+                    <div class="species-search">
+                        <input type="text" id="species-input" placeholder="Search by name or code..." autocomplete="off" />
+                        <div class="species-dropdown" id="species-dropdown"></div>
+                    </div>
+                </div>
+                <div id="target-lifelist-inputs" style="display: none;">
+                    <input type="file" id="csv-input" accept=".csv" />
+                    <div id="file-status" class="form-hint">Upload your MyEBirdData.csv from eBird</div>
+                    <div class="list-type-toggle" style="margin-top: 0.4rem;">
+                        <button class="list-type-btn active" data-type="life">Life</button>
+                        <button class="list-type-btn" data-type="year">Year</button>
+                    </div>
+                    <select id="scope-country" disabled style="margin-top: 0.4rem;">
+                        <option value="">World (all countries)</option>
+                    </select>
+                    <select id="scope-state" disabled style="margin-top: 0.4rem;">
+                        <option value="">All states/provinces</option>
+                    </select>
+                    <select id="scope-county" disabled style="margin-top: 0.4rem;">
+                        <option value="">All counties</option>
+                    </select>
+                </div>
             </div>
 
             <div class="form-group">
@@ -66,6 +74,7 @@
                     </div>
                 </div>
                 <div id="driving-inputs" style="display: none;">
+                    <div class="form-hint" style="margin-bottom: 0.3rem;">From...</div>
                     <div class="location-search">
                         <div class="location-input-row">
                             <input type="text" id="location-input" placeholder="Search for a location..." autocomplete="off" />
@@ -76,7 +85,11 @@
                         <div class="location-dropdown" id="location-dropdown"></div>
                     </div>
                     <div id="location-selected" class="location-selected"></div>
-                    <input type="number" id="max-driving-minutes" placeholder="Max driving time (minutes)" min="1" max="480" style="margin-top: 0.4rem;" />
+                    <div class="form-hint" style="margin-top: 0.5rem; margin-bottom: 0.3rem;">Up to...</div>
+                    <div class="driving-time-input">
+                        <input type="number" id="max-driving-minutes" min="1" max="480" />
+                        <span class="driving-time-suffix">minutes</span>
+                    </div>
                 </div>
             </div>
 
@@ -103,19 +116,6 @@
             </div>
 
             <button class="primary" id="optimize-btn" disabled>Optimize</button>
-
-            <div class="divider-or">
-                <span>or</span>
-            </div>
-
-            <div class="form-group">
-                <label>Find a Species</label>
-                <div class="species-search">
-                    <input type="text" id="species-input" placeholder="Search by name or code..." autocomplete="off" />
-                    <div class="species-dropdown" id="species-dropdown"></div>
-                </div>
-                <div id="species-selected" class="species-selected"></div>
-            </div>
         </aside>
 
         <main class="main" id="results">

@@ -46,6 +46,19 @@ function updateMapTiles() {
     tileLayer.setUrl(tileSets[theme].url);
 }
 
+// Target species mode toggle (search / lifelist)
+let targetMode = "search"; // "search" or "lifelist"
+
+document.querySelectorAll(".target-mode-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll(".target-mode-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        targetMode = btn.dataset.mode;
+        document.getElementById("target-search-inputs").style.display = targetMode === "search" ? "" : "none";
+        document.getElementById("target-lifelist-inputs").style.display = targetMode === "lifelist" ? "" : "none";
+    });
+});
+
 // List type toggle (life / year)
 document.querySelectorAll(".list-type-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -388,7 +401,7 @@ document.getElementById("csv-input").addEventListener("change", e => {
 
     const status = document.getElementById("file-status");
     status.textContent = "Processing eBird data...";
-    status.className = "file-status";
+    status.className = "form-hint";
 
     const reader = new FileReader();
     reader.onload = ev => {
@@ -567,7 +580,7 @@ function updateLifeList() {
 
     const status = document.getElementById("file-status");
     status.textContent = `${lifeList.length} species on your ${label} ${listLabel}`;
-    status.className = "file-status loaded";
+    status.className = "form-hint loaded";
 }
 
 function parseCSVLine(line) {
@@ -822,7 +835,6 @@ fetch("/api/species")
 
 const speciesInput = document.getElementById("species-input");
 const speciesDropdown = document.getElementById("species-dropdown");
-const speciesSelected = document.getElementById("species-selected");
 
 function searchRank(species, query) {
     // Returns 0 (no match) or 1-6 (priority, lower = better match)
@@ -872,7 +884,6 @@ function selectSpecies(sp) {
     selectedSpecies = sp;
     speciesInput.value = sp.comName;
     speciesDropdown.classList.remove("open");
-    speciesSelected.textContent = `Selected: ${sp.comName}`;
 }
 
 speciesInput.addEventListener("input", () => {

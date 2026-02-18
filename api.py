@@ -255,6 +255,10 @@ def run_optimization(req: OptimizeRequest):
         for h in result.selected_hotspots
     ]
 
+    hotspots = [h for h in hotspots if h["target_species"]]
+    for i, h in enumerate(hotspots):
+        h["rank"] = i + 1
+
     hotspots = add_recent_observations(hotspots)
 
     return {
