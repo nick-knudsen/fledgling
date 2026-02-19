@@ -436,6 +436,9 @@ locationInput.addEventListener("focus", () => {
     }
 });
 
+// Clear stale file input on page load
+document.getElementById("csv-input").value = "";
+
 // Parse CSV client-side
 document.getElementById("csv-input").addEventListener("change", e => {
     const file = e.target.files[0];
