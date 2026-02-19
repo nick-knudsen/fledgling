@@ -102,7 +102,8 @@ FROM sightings_raw
 WHERE "LOCALITY TYPE" = 'H' AND
     ("CATEGORY" IN ('species', 'issf', 'form', 'domestic')) AND
     "ALL SPECIES REPORTED" IS TRUE AND
-    "OBSERVATION COUNT" != '0'
+    "OBSERVATION COUNT" != '0' AND
+    "COMMON NAME" NOT LIKE '% sp.%' -- this is needed to filter out Domestic Goose sp. and Domestic Lovebird sp. which for some reason are in the species category?
 ;
 """)
 
