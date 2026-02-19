@@ -141,20 +141,19 @@ html[data-theme="dark"] .theme-switch-knob { left: 23px; }
 .multi-select-dropdown {
     display: none; position: absolute; top: 100%; left: 0; right: 0;
     background: var(--bg-surface); border: 1px solid var(--input-border);
-    border-radius: 6px; margin-top: 2px; max-height: 12rem; overflow-y: auto;
+    border-radius: 6px; margin-top: 2px; overflow-y: auto;
     z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 .multi-select-dropdown.open { display: block; }
 .multi-select-item {
-    padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.85rem;
+    padding: 0.4rem 0.75rem; cursor: pointer; border-radius: 6px; font-size: 0.9rem;
     display: flex; align-items: center; justify-content: space-between;
 }
 .multi-select-item:hover { background: var(--hover); }
 .multi-select-item .check {
     color: var(--accent); font-size: 0.9rem; visibility: hidden;
 }
-.multi-select-item.selected { background: rgba(26, 115, 232, 0.08); }
-html[data-theme="dark"] .multi-select-item.selected { background: rgba(91, 156, 246, 0.12); }
+.multi-select-item.selected { background: var(--hover); }
 .multi-select-item.selected .check {
     visibility: visible;
 }

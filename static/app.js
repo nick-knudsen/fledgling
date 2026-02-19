@@ -284,7 +284,12 @@ for (const id of ["country", "state", "county"]) {
         for (const other of ["country", "state", "county"]) {
             if (other !== id) document.getElementById(`${other}-dropdown`).classList.remove("open");
         }
-        document.getElementById(`${id}-dropdown`).classList.toggle("open");
+        const dropdown = document.getElementById(`${id}-dropdown`);
+        dropdown.classList.toggle("open");
+        if (dropdown.classList.contains("open")) {
+            const rect = dropdown.getBoundingClientRect();
+            dropdown.style.maxHeight = `${window.innerHeight - rect.top - 16}px`;
+        }
     });
 }
 
