@@ -452,12 +452,26 @@ document.getElementById("csv-input").addEventListener("change", e => {
     reader.onload = ev => {
         // Defer processing so the "Processing..." message paints first
         requestAnimationFrame(() => setTimeout(() => {
-            const text = ev.target.result;
-            allObservations = parseObservations(text);
-            populateScopeDropdowns();
-            updateLifeList();
-            document.getElementById("optimize-btn").disabled = false;
+            try {
+                const text = ev.target.result;
+                allObservations = parseObservations(text);
+                if (allObservations.length === 0) {
+                    status.textContent = "No observations found. Is this a valid eBird CSV?";
+                    status.className = "form-hint error";
+                    return;
+                }
+                populateScopeDropdowns();
+                updateLifeList();
+                document.getElementById("optimize-btn").disabled = false;
+            } catch (err) {
+                status.textContent = "Failed to parse CSV file.";
+                status.className = "form-hint error";
+            }
         }, 0));
+    };
+    reader.onerror = () => {
+        status.textContent = "Failed to read file.";
+        status.className = "form-hint error";
     };
     reader.readAsText(file);
 });

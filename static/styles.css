@@ -171,6 +171,8 @@ html[data-theme="dark"] .multi-select-item.selected { background: rgba(91, 156, 
 .form-hint { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; }
 
 .form-hint.loaded { color: var(--success); }
+.form-hint.error { color: #d32f2f; }
+html[data-theme="dark"] .form-hint.error { color: #ef5350; }
 
 button.primary {
     width: 100%; padding: 0.7rem; background: var(--accent); color: #fff;
