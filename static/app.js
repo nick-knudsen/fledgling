@@ -753,6 +753,8 @@ function renderResults(data) {
     }
 
     let html = `
+        <div class="results-layout">
+        <div class="results-list">
         <div class="metrics">
             <div class="metric-card">
                 <div class="value">${data.total_expected_lifers}</div>
@@ -769,8 +771,6 @@ function renderResults(data) {
             </div>
             `}
         </div>
-        <div class="results-layout">
-        <div class="results-list">
         <div class="section-title-row">
             <div class="section-title">Recommended Hotspots</div>
             <div class="expand-collapse-btns">
@@ -874,7 +874,7 @@ function renderResults(data) {
 
         marker.on("mouseover", () => highlightHotspot(h.rank, true));
         marker.on("mouseout", () => highlightHotspot(h.rank, false));
-        marker.on("click", () => toggleHotspotBody(h.rank));
+        marker.on("click", () => toggleHotspotBody(h.rank, true));
 
         bounds.push([h.latitude, h.longitude]);
     });
@@ -921,14 +921,15 @@ function highlightHotspot(rank, on) {
     if (card) card.classList.toggle("highlight", on);
 }
 
-function toggleHotspotBody(rank) {
+function toggleHotspotBody(rank, scroll) {
     const card = document.querySelector(`.hotspot-card[data-rank="${rank}"]`);
     if (!card) return;
     const body = card.querySelector(".hotspot-body");
     if (body) body.classList.toggle("open");
 
-    // Scroll card into view if triggered from map
-    card.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (scroll) {
+        card.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
 }
 
 // Species search autocomplete
