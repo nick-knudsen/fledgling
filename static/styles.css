@@ -206,6 +206,20 @@ button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
 .map-marker-inner.highlight {
     transform: scale(1.2);
 }
+.map-fit-btn {
+    width: 34px; height: 34px; border: none; border-radius: 6px;
+    background: var(--bg-surface); color: var(--text);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+}
+.map-fit-btn:hover { background: var(--hover); }
+.leaflet-bar a {
+    background-color: var(--bg-surface) !important;
+    color: var(--text) !important;
+    border-bottom-color: var(--border) !important;
+}
+.leaflet-bar a:hover { background-color: var(--hover) !important; }
+.leaflet-bar { border-color: var(--border) !important; }
 
 .hotspot-card {
     background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;

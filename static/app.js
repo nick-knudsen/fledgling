@@ -449,9 +449,7 @@ document.getElementById("csv-input").addEventListener("change", e => {
     reader.onload = ev => {
         const text = ev.target.result;
         allObservations = parseObservations(text);
-        populateCountryDropdown();
-        resetScopeDropdowns("state");
-        resetScopeDropdowns("county");
+        populateScopeDropdowns();
         updateLifeList();
         document.getElementById("optimize-btn").disabled = false;
     };
@@ -510,82 +508,95 @@ function regionName(code) {
     return regionNames[code] || code;
 }
 
-function resetScopeDropdowns(level) {
-    if (level === "state" || level === "country") {
-        const stateSel = document.getElementById("scope-state");
-        stateSel.innerHTML = '<option value="">All states/provinces</option>';
-        stateSel.disabled = true;
-    }
-    if (level === "state" || level === "country" || level === "county") {
-        const countySel = document.getElementById("scope-county");
-        countySel.innerHTML = '<option value="">All counties</option>';
-        countySel.disabled = true;
-    }
-}
+function populateScopeDropdowns() {
+    const country = document.getElementById("scope-country").value;
+    const state = document.getElementById("scope-state").value;
 
-function populateCountryDropdown() {
-    const sel = document.getElementById("scope-country");
-    sel.innerHTML = '<option value="">World (all countries)</option>';
-
+    // Countries: always all
+    const countrySel = document.getElementById("scope-country");
     const countries = new Set();
     for (const obs of allObservations) {
         if (obs.countryCode) countries.add(obs.countryCode);
     }
-
+    countrySel.innerHTML = '<option value="">World (all countries)</option>';
     for (const code of [...countries].sort((a, b) => regionName(a).localeCompare(regionName(b)))) {
         const opt = document.createElement("option");
         opt.value = code;
         opt.textContent = regionName(code);
-        sel.appendChild(opt);
+        countrySel.appendChild(opt);
     }
-    sel.disabled = false;
+    countrySel.value = countries.has(country) ? country : "";
+    countrySel.disabled = false;
+
+    // States: filtered by country if one is selected
+    const stateSel = document.getElementById("scope-state");
+    const states = new Set();
+    for (const obs of allObservations) {
+        if (obs.state && (!countrySel.value || obs.countryCode === countrySel.value)) {
+            states.add(obs.state);
+        }
+    }
+    stateSel.innerHTML = '<option value="">All states/provinces</option>';
+    for (const code of [...states].sort((a, b) => regionName(a).localeCompare(regionName(b)))) {
+        const opt = document.createElement("option");
+        opt.value = code;
+        opt.textContent = regionName(code);
+        stateSel.appendChild(opt);
+    }
+    stateSel.value = states.has(state) ? state : "";
+    stateSel.disabled = states.size === 0;
+
+    // Counties: filtered by country and state if selected
+    const countySel = document.getElementById("scope-county");
+    const county = countySel.value;
+    const counties = new Set();
+    for (const obs of allObservations) {
+        if (obs.county
+            && (!countrySel.value || obs.countryCode === countrySel.value)
+            && (!stateSel.value || obs.state === stateSel.value)) {
+            counties.add(obs.county);
+        }
+    }
+    countySel.innerHTML = '<option value="">All counties</option>';
+    for (const c of [...counties].sort()) {
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        countySel.appendChild(opt);
+    }
+    countySel.value = counties.has(county) ? county : "";
+    countySel.disabled = counties.size === 0;
 }
 
 document.getElementById("scope-country").addEventListener("change", () => {
-    resetScopeDropdowns("state");
-    const country = document.getElementById("scope-country").value;
-
-    if (country) {
-        const stateSel = document.getElementById("scope-state");
-        const states = new Set();
-        for (const obs of allObservations) {
-            if (obs.countryCode === country && obs.state) states.add(obs.state);
-        }
-        for (const code of [...states].sort((a, b) => regionName(a).localeCompare(regionName(b)))) {
-            const opt = document.createElement("option");
-            opt.value = code;
-            opt.textContent = regionName(code);
-            stateSel.appendChild(opt);
-        }
-        stateSel.disabled = states.size === 0;
-    }
-
+    populateScopeDropdowns();
     updateLifeList();
 });
 
 document.getElementById("scope-state").addEventListener("change", () => {
-    resetScopeDropdowns("county");
     const state = document.getElementById("scope-state").value;
-
-    if (state) {
-        const countySel = document.getElementById("scope-county");
-        const counties = new Set();
-        for (const obs of allObservations) {
-            if (obs.state === state && obs.county) counties.add(obs.county);
-        }
-        for (const c of [...counties].sort()) {
-            const opt = document.createElement("option");
-            opt.value = c;
-            opt.textContent = c;
-            countySel.appendChild(opt);
-        }
-        countySel.disabled = counties.size === 0;
+    if (state && !document.getElementById("scope-country").value) {
+        const obs = allObservations.find(o => o.state === state);
+        if (obs) document.getElementById("scope-country").value = obs.countryCode;
     }
-
+    populateScopeDropdowns();
     updateLifeList();
 });
 
 document.getElementById("scope-county").addEventListener("change", () => {
+    const county = document.getElementById("scope-county").value;
+    if (county) {
+        const obs = allObservations.find(o => o.county === county);
+        if (obs) {
+            if (!document.getElementById("scope-country").value) {
+                document.getElementById("scope-country").value = obs.countryCode;
+            }
+            if (!document.getElementById("scope-state").value) {
+                document.getElementById("scope-state").value = obs.state;
+            }
+        }
+    }
+    populateScopeDropdowns();
     updateLifeList();
 });
 
@@ -595,13 +606,9 @@ function updateLifeList() {
     const county = document.getElementById("scope-county").value;
 
     let filtered = allObservations;
-    if (county) {
-        filtered = filtered.filter(o => o.county === county && o.state === state);
-    } else if (state) {
-        filtered = filtered.filter(o => o.state === state);
-    } else if (country) {
-        filtered = filtered.filter(o => o.countryCode === country);
-    }
+    if (country) filtered = filtered.filter(o => o.countryCode === country);
+    if (state) filtered = filtered.filter(o => o.state === state);
+    if (county) filtered = filtered.filter(o => o.county === county);
 
     if (listType === "year") {
         const currentYear = String(new Date().getFullYear());
@@ -881,6 +888,19 @@ function renderResults(data) {
 
     if (bounds.length > 0) {
         map.fitBounds(bounds, { padding: [30, 30] });
+
+        const FitControl = L.Control.extend({
+            options: { position: "topright" },
+            onAdd() {
+                const btn = L.DomUtil.create("button", "map-fit-btn");
+                btn.title = "Zoom to fit all hotspots";
+                btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="1,5 1,1 5,1"/><polyline points="11,1 15,1 15,5"/><polyline points="15,11 15,15 11,15"/><polyline points="5,15 1,15 1,11"/></svg>`;
+                L.DomEvent.disableClickPropagation(btn);
+                btn.addEventListener("click", () => map.fitBounds(bounds, { padding: [30, 30] }));
+                return btn;
+            }
+        });
+        map.addControl(new FitControl());
     }
 
     // Wire up hotspot card hover and click
