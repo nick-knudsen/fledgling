@@ -19,6 +19,8 @@ con = dk.connect("data/dbs/" + output_db)
 con.execute("PRAGMA enable_print_progress_bar;")
 con.execute("PRAGMA progress_bar_time=500;")  # show after 500ms instead of 2s
 con.execute("SET temp_directory = 'data/dbs/tmp';")  # spill to disk instead of OOM
+con.execute("SET memory_limit = '8GB';")
+con.execute("SET preserve_insertion_order = false;")
 
 # read raw data, stage, deduplicate, and filter vagrants
 print(f"Reading {input_path} into {output_db}...")
