@@ -1,15 +1,18 @@
 import sys
 import duckdb as dk
 
-if len(sys.argv) != 3:
-    print("Usage: python frequency_data_pipeline.py <region_code> <update_month-year>")
+if len(sys.argv) < 3:
+    print("Usage: python frequency_data_pipeline.py <region_code> <update_month-year> [input_dir]")
     print("Example: python frequency_data_pipeline.py US-AZ Dec-2025")
+    print("Example: python frequency_data_pipeline.py US-AZ Dec-2025 'S:/eBird downloads'")
     sys.exit(1)
 
 region_code = sys.argv[1]
 update_month_year = sys.argv[2]
+input_dir = sys.argv[3] if len(sys.argv) > 3 else "data/raw"
 
 input_tsv = f"ebd_{region_code}_smp_rel{update_month_year}.txt"
+input_path = f"{input_dir}/{input_tsv}"
 output_db = f"{region_code}.duckdb"
 
 con = dk.connect("data/dbs/" + output_db)
@@ -17,7 +20,7 @@ con.execute("PRAGMA enable_print_progress_bar;")
 con.execute("PRAGMA progress_bar_time=500;")  # show after 500ms instead of 2s
 
 # read raw data, stage, deduplicate, and filter vagrants
-print(f"Reading {input_tsv} into {output_db}...")
+print(f"Reading {input_path} into {output_db}...")
 con.execute(f"""--sql
 DROP TABLE IF EXISTS sightings_filtered;
 CREATE TABLE sightings_filtered AS
@@ -53,7 +56,7 @@ WITH sightings_raw AS (
         --"NUMBER OBSERVERS",
         "ALL SPECIES REPORTED",
         "GROUP IDENTIFIER"
-    FROM read_csv_auto('data/raw/{input_tsv}',
+    FROM read_csv_auto('{input_path}',
         delim='\t',
         quote='',
         types={{
