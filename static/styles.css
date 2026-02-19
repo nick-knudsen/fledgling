@@ -41,15 +41,9 @@ html[data-theme="dark"] {
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: system-ui, -apple-system, sans-serif; color: var(--text); background: var(--bg); }
 
-header {
-    background: var(--bg-surface); border-bottom: 1px solid var(--border);
-    padding: 1.5rem 2rem; display: flex; justify-content: space-between; align-items: center;
-}
-
-header > div { text-align: center; }
-header p { color: var(--text-secondary); margin-top: 0.25rem; font-size: 0.9rem; }
-
-/* Logo */
+/* Logo in sidebar */
+.sidebar-logo { text-align: center; padding-bottom: 1rem; align-items: center; border-bottom: 1px solid var(--border); }
+.sidebar-logo p { color: var(--text-secondary); margin-top: 0.25rem; font-size: 0.85rem; }
 .logo { height: 8rem; vertical-align: middle; }
 .logo-dark { display: none; }
 html[data-theme="dark"] .logo-light { display: none; }
@@ -69,7 +63,7 @@ html[data-theme="dark"] .theme-switch { background: #f8f8f8; }
 }
 html[data-theme="dark"] .theme-switch-knob { left: 23px; }
 
-.layout { display: flex; min-height: calc(100vh - 80px); }
+.layout { display: flex; min-height: 100vh; }
 
 .sidebar {
     width: 340px; min-width: 340px; background: var(--bg-surface);
