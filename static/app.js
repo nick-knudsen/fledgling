@@ -769,7 +769,8 @@ function renderResults(data) {
             </div>
             `}
         </div>
-        <div id="map"></div>
+        <div class="results-layout">
+        <div class="results-list">
         <div class="section-title-row">
             <div class="section-title">Recommended Hotspots</div>
             <div class="expand-collapse-btns">
@@ -842,6 +843,12 @@ function renderResults(data) {
             </div>
         `;
     }
+
+    html += `
+        </div>
+        <div class="results-map"><div id="map"></div></div>
+        </div>
+    `;
 
     el.innerHTML = html;
 
@@ -921,7 +928,7 @@ function toggleHotspotBody(rank) {
     if (body) body.classList.toggle("open");
 
     // Scroll card into view if triggered from map
-    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 // Species search autocomplete

@@ -190,6 +190,9 @@ button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
 .metric-card .value { font-size: 1.75rem; font-weight: 700; }
 .metric-card .label { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem; }
 
+/* Results layout */
+.results-layout { display: flex; flex-direction: column; }
+.results-map { order: -1; }
 #map { height: 350px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1.5rem; }
 .map-marker { background: none; border: none; }
 .map-marker-inner {
@@ -207,6 +210,7 @@ button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
 .hotspot-card {
     background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;
     margin-bottom: 1rem; overflow: hidden; transition: border-color 0.15s ease;
+    scroll-margin-top: 0.75rem;
 }
 .hotspot-card.highlight {
     border-color: var(--accent);
@@ -320,3 +324,19 @@ td { padding: 0.4rem 0; border-bottom: 1px solid var(--border-light); }
     cursor: pointer; transition: background 0.15s;
 }
 .expand-collapse-btn:hover { background: var(--hover); border-color: var(--accent); }
+
+/* Wide screen: map on right, hotspot list on left */
+@media (min-width: 1400px) {
+    .layout { height: 100vh; }
+    .sidebar { overflow-y: auto; }
+    .main { overflow-y: auto; }
+    .results-layout {
+        flex-direction: row; gap: 1.5rem;
+    }
+    .results-list { flex: 1; min-width: 0; }
+    .results-map {
+        order: 0; width: 45%; min-width: 400px; flex-shrink: 0;
+        position: sticky; top: 0; align-self: flex-start;
+    }
+    .results-map #map { height: calc(100vh - 12rem); margin-bottom: 0; }
+}
