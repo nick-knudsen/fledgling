@@ -450,11 +450,14 @@ document.getElementById("csv-input").addEventListener("change", e => {
 
     const reader = new FileReader();
     reader.onload = ev => {
-        const text = ev.target.result;
-        allObservations = parseObservations(text);
-        populateScopeDropdowns();
-        updateLifeList();
-        document.getElementById("optimize-btn").disabled = false;
+        // Defer processing so the "Processing..." message paints first
+        requestAnimationFrame(() => setTimeout(() => {
+            const text = ev.target.result;
+            allObservations = parseObservations(text);
+            populateScopeDropdowns();
+            updateLifeList();
+            document.getElementById("optimize-btn").disabled = false;
+        }, 0));
     };
     reader.readAsText(file);
 });
