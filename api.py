@@ -290,7 +290,6 @@ def search_hotspots(
     country: str | None = None,
     states: str | None = None,
     state_counties: str | None = None,
-    limit: int = 10,
 ):
     """Search hotspots by name for autocomplete."""
     if len(q) < 2:
@@ -319,7 +318,7 @@ def search_hotspots(
         rows = con.execute(
             f"SELECT locality_id, locality, latitude, longitude, county, state "
             f"FROM hotspots WHERE locality ILIKE '%{safe_q}%' AND {geo_filter} "
-            f"ORDER BY locality LIMIT {limit}"
+            f"ORDER BY locality"
         ).fetchall()
     finally:
         con.close()
