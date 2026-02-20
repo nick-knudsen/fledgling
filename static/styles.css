@@ -169,6 +169,33 @@ html[data-theme="dark"] .theme-switch-knob { left: 23px; }
 .multi-select-actions button.active { color: #fff; background: var(--accent); }
 .form-hint { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; }
 
+.help-btn {
+    width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--text-secondary);
+    background: none; color: var(--text-secondary); font-size: .9rem; font-weight: 600;
+    font-family: system-ui, -apple-system, sans-serif;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; padding: 0; line-height: 1; margin-top: 6px;
+}
+.help-btn:hover { border-color: var(--accent); color: var(--accent); }
+.help-dialog-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    z-index: 2000; align-items: center; justify-content: center;
+}
+.help-dialog-overlay.open { display: flex; }
+.help-dialog {
+    background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.5rem; max-width: 360px; width: 90%; box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+    text-align: center;
+}
+.help-dialog p { font-size: 0.9rem; color: var(--text); line-height: 1.5; margin-bottom: 1rem; }
+.help-dialog a { color: var(--accent); text-decoration: none; }
+.help-dialog a:hover { text-decoration: underline; }
+.help-dialog-close {
+    padding: 0.4rem 1.5rem; background: var(--accent); color: #fff;
+    border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 500; cursor: pointer;
+}
+.help-dialog-close:hover { background: var(--accent-hover); }
+
 .form-hint.loaded { color: var(--success); }
 .form-hint.error { color: #d32f2f; }
 html[data-theme="dark"] .form-hint.error { color: #ef5350; }
@@ -370,7 +397,7 @@ td { padding: 0.4rem 0; border-bottom: 1px solid var(--border-light); }
 /* Add to itinerary button */
 .add-itinerary-btn, .added-itinerary-btn {
     width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--input-border);
-    font-size: 1.1rem; line-height: 1; display: flex; align-items: center; justify-content: center; padding-bottom: 2px;
+    font-size: 1.1rem; line-height: 1; display: flex; align-items: center; justify-content: center; padding-bottom: 3px;
     margin-left: 0.75rem; flex-shrink: 0; transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .add-itinerary-btn {
@@ -392,11 +419,17 @@ td { padding: 0.4rem 0; border-bottom: 1px solid var(--border-light); }
 /* Remove from itinerary button */
 .remove-itinerary-btn {
     width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--input-border);
-    font-size: 1.2rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+    position: relative; font-size: 0;
     margin-left: 0.75rem; flex-shrink: 0;
     background: var(--input-bg); color: var(--text-secondary); cursor: pointer;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
+.remove-itinerary-btn::before, .remove-itinerary-btn::after {
+    content: ''; position: absolute; top: 50%; left: 50%;
+    width: 12px; height: 1.5px; background: currentColor;
+}
+.remove-itinerary-btn::before { transform: translate(-50%, -50%) rotate(45deg); }
+.remove-itinerary-btn::after { transform: translate(-50%, -50%) rotate(-45deg); }
 .remove-itinerary-btn:hover { border-color: #d32f2f; color: #d32f2f; background: var(--hover); }
 html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; color: #ef5350; }
 

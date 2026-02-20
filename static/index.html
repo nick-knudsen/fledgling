@@ -34,7 +34,16 @@
                 </div>
                 <div id="target-lifelist-inputs" style="display: none;">
                     <input type="file" id="csv-input" accept=".csv" />
-                    <div id="file-status" class="form-hint">Upload your MyEBirdData.csv from eBird</div>
+                    <div style="display: flex; align-items: center; gap: 0.4rem;">
+                        <div id="file-status" class="form-hint">Upload your MyEBirdData.csv from eBird</div>
+                        <button type="button" class="help-btn" id="upload-help-btn" aria-label="Help" title="Help">?</button>
+                    </div>
+                    <div class="help-dialog-overlay" id="upload-help-overlay">
+                        <div class="help-dialog">
+                            <p><a href="https://ebird.org/downloadMyData" target="_blank" rel="noopener noreferrer">Download your data from eBird</a> and upload the unzipped file here. Your data are not stored on this site in any way.</p>
+                            <button type="button" class="help-dialog-close" id="upload-help-close">OK</button>
+                        </div>
+                    </div>
                     <label style="margin-top: 0.4rem;">List Scope</label>
                     <div class="list-type-toggle">
                         <button class="list-type-btn active" data-type="life">Life</button>
@@ -114,7 +123,7 @@
                 <input type="number" id="k-input" value="5" min="1" max="20" />
             </div>
 
-            <button class="primary" id="optimize-btn" disabled>Optimize</button>
+            <button class="primary" id="optimize-btn" disabled>Find Hotspots</button>
         </aside>
 
         <main class="main" id="results">
@@ -126,24 +135,5 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/app.js"></script>
-
-    <!-- Dev-only: live CSS reload (remove for production) -->
-    <script>
-    (function() {
-        const link = document.querySelector('link[href="/styles.css"]');
-        if (!link) return;
-        let lastModified = '';
-        setInterval(async () => {
-            try {
-                const res = await fetch('/styles.css', { method: 'HEAD', cache: 'no-cache' });
-                const mod = res.headers.get('last-modified') || res.headers.get('etag') || '';
-                if (lastModified && mod !== lastModified) {
-                    link.href = '/styles.css?t=' + Date.now();
-                }
-                lastModified = mod;
-            } catch {}
-        }, 500);
-    })();
-    </script>
 </body>
 </html>

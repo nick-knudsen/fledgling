@@ -36,6 +36,17 @@ document.getElementById("theme-toggle").addEventListener("click", () => {
     applyTheme(isDark ? "light" : "dark");
 });
 
+// Upload help dialog
+document.getElementById("upload-help-btn").addEventListener("click", () => {
+    document.getElementById("upload-help-overlay").classList.add("open");
+});
+document.getElementById("upload-help-close").addEventListener("click", () => {
+    document.getElementById("upload-help-overlay").classList.remove("open");
+});
+document.getElementById("upload-help-overlay").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) document.getElementById("upload-help-overlay").classList.remove("open");
+});
+
 const tileSets = {
     light: {
         url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -56,6 +67,15 @@ function updateMapTiles() {
 // Target species mode toggle (search / lifelist)
 let targetMode = "search"; // "search" or "lifelist"
 
+function updateOptimizeBtn() {
+    const btn = document.getElementById("optimize-btn");
+    if (targetMode === "search") {
+        btn.disabled = !selectedSpecies;
+    } else {
+        btn.disabled = allObservations.length === 0;
+    }
+}
+
 document.querySelectorAll(".target-mode-btn").forEach(btn => {
     btn.addEventListener("click", () => {
         document.querySelectorAll(".target-mode-btn").forEach(b => b.classList.remove("active"));
@@ -63,6 +83,7 @@ document.querySelectorAll(".target-mode-btn").forEach(btn => {
         targetMode = btn.dataset.mode;
         document.getElementById("target-search-inputs").style.display = targetMode === "search" ? "" : "none";
         document.getElementById("target-lifelist-inputs").style.display = targetMode === "lifelist" ? "" : "none";
+        updateOptimizeBtn();
     });
 });
 
@@ -275,6 +296,7 @@ function populateMultiSelect(id, items, selectedSet, onChange) {
                 dropdown.querySelectorAll(".multi-select-item").forEach(el => el.classList.remove("selected"));
                 selectedSet.add(val);
                 item.classList.add("selected");
+                dropdown.scrollTop = 0;
                 dropdown.classList.remove("open");
             }
             updateMultiSelectDisplay(id, selectedSet, defaultText);
@@ -300,7 +322,11 @@ for (const id of ["country", "state", "county"]) {
     document.getElementById(`${id}-display`).addEventListener("click", () => {
         // Close other dropdowns
         for (const other of ["country", "state", "county"]) {
-            if (other !== id) document.getElementById(`${other}-dropdown`).classList.remove("open");
+            if (other !== id) {
+                const otherDd = document.getElementById(`${other}-dropdown`);
+                otherDd.scrollTop = 0;
+                otherDd.classList.remove("open");
+            }
         }
         const dropdown = document.getElementById(`${id}-dropdown`);
         dropdown.classList.toggle("open");
@@ -315,7 +341,9 @@ document.addEventListener("click", (e) => {
     for (const id of ["country", "state", "county"]) {
         const select = document.getElementById(`${id}-select`);
         if (!select.contains(e.target)) {
-            document.getElementById(`${id}-dropdown`).classList.remove("open");
+            const dd = document.getElementById(`${id}-dropdown`);
+            dd.scrollTop = 0;
+            dd.classList.remove("open");
         }
     }
 });
@@ -450,6 +478,7 @@ addScrollWheel("max-driving-minutes", 1, 480);
 addScrollWheel("k-input", 1, 20);
 
 locationInput.addEventListener("blur", () => {
+    locationDropdown.scrollTop = 0;
     locationDropdown.classList.remove("open");
 });
 
@@ -473,24 +502,73 @@ document.getElementById("csv-input").addEventListener("change", e => {
 
     const reader = new FileReader();
     reader.onload = ev => {
-        // Defer processing so the "Processing..." message paints first
-        requestAnimationFrame(() => setTimeout(() => {
+        // Parse in chunks so the browser can paint progress updates between batches
+        requestAnimationFrame(() => requestAnimationFrame(() => {
             try {
                 const text = ev.target.result;
-                allObservations = parseObservations(text);
-                if (allObservations.length === 0) {
+                const lines = text.split("\n");
+                if (lines.length < 2) {
                     status.textContent = "No observations found. Is this a valid eBird CSV?";
                     status.className = "form-hint error";
                     return;
                 }
-                populateScopeDropdowns();
-                updateLifeList();
-                document.getElementById("optimize-btn").disabled = false;
+
+                const header = parseCSVLine(lines[0]);
+                const nameIdx = header.indexOf("Common Name");
+                const sciIdx = header.indexOf("Scientific Name");
+                const countIdx = header.indexOf("Count");
+                const stateIdx = header.indexOf("State/Province");
+                const countyIdx = header.indexOf("County");
+                const dateIdx = header.indexOf("Date");
+                if (nameIdx === -1) {
+                    status.textContent = "No observations found. Is this a valid eBird CSV?";
+                    status.className = "form-hint error";
+                    return;
+                }
+
+                const observations = [];
+                const CHUNK = 5000;
+                let i = 1;
+
+                function processChunk() {
+                    const end = Math.min(i + CHUNK, lines.length);
+                    for (; i < end; i++) {
+                        if (!lines[i].trim()) continue;
+                        const cols = parseCSVLine(lines[i]);
+                        let name = cols[nameIdx] || "";
+                        const sci = cols[sciIdx] || "";
+                        const count = cols[countIdx] || "";
+                        if (count === "0") continue;
+                        const parenIdx = name.indexOf(" (");
+                        if (parenIdx !== -1) name = name.substring(0, parenIdx);
+                        if (name.includes("/") || name.includes(" sp.") || sci.includes(" x ")) continue;
+                        const stateCode = cols[stateIdx] || "";
+                        const countryCode = stateCode.includes("-") ? stateCode.split("-")[0] : "";
+                        if (name) {
+                            observations.push({ name, sci, countryCode, state: stateCode, county: cols[countyIdx] || "", date: cols[dateIdx] || "" });
+                        }
+                    }
+                    if (i < lines.length) {
+                        status.textContent = `Processing eBird data... ${Math.round((i / lines.length) * 100)}%`;
+                        setTimeout(processChunk, 0);
+                    } else {
+                        allObservations = observations;
+                        if (allObservations.length === 0) {
+                            status.textContent = "No observations found. Is this a valid eBird CSV?";
+                            status.className = "form-hint error";
+                            return;
+                        }
+                        populateScopeDropdowns();
+                        updateLifeList();
+                        updateOptimizeBtn();
+                    }
+                }
+                processChunk();
             } catch (err) {
                 status.textContent = "Failed to parse CSV file.";
                 status.className = "form-hint error";
             }
-        }, 0));
+        }));
     };
     reader.onerror = () => {
         status.textContent = "Failed to read file.";
@@ -722,7 +800,7 @@ async function runOptimization() {
     if (targetMode === "search" && !selectedSpecies) {
         alert("Please select a species first.");
         btn.disabled = false;
-        btn.textContent = "Optimize";
+        btn.textContent = "Find Hotspots";
         return;
     }
 
@@ -742,14 +820,14 @@ async function runOptimization() {
         if (centerLat == null || centerLon == null) {
             alert("Please select a location first.");
             btn.disabled = false;
-            btn.textContent = "Optimize";
+            btn.textContent = "Find Hotspots";
             return;
         }
         const maxMin = parseInt(document.getElementById("max-driving-minutes").value);
         if (!maxMin || maxMin < 1) {
             alert("Please enter a valid driving time.");
             btn.disabled = false;
-            btn.textContent = "Optimize";
+            btn.textContent = "Find Hotspots";
             return;
         }
         body.center_lat = centerLat;
@@ -795,7 +873,7 @@ async function runOptimization() {
             `<div class="empty-state"><p>Error: ${err.message}</p></div>`;
     } finally {
         btn.disabled = false;
-        btn.textContent = "Optimize";
+        btn.textContent = "Find Hotspots";
     }
 }
 
@@ -1262,6 +1340,7 @@ function renderHotspotSearchDropdown(results) {
     const filtered = results.filter(r => !itinerary.some(it => it.locality_id === r.locality_id));
 
     if (filtered.length === 0) {
+        dropdown.scrollTop = 0;
         dropdown.classList.remove("open");
         return;
     }
@@ -1283,7 +1362,7 @@ async function selectHotspotFromSearch(summary) {
     const input = document.getElementById("hotspot-search-input");
     const dropdown = document.getElementById("hotspot-search-dropdown");
     if (input) input.value = "";
-    if (dropdown) dropdown.classList.remove("open");
+    if (dropdown) { dropdown.scrollTop = 0; dropdown.classList.remove("open"); }
 
     if (itinerary.some(it => it.locality_id === summary.locality_id)) return;
 
@@ -1326,6 +1405,7 @@ function wireHotspotSearch() {
     input.addEventListener("input", () => {
         const q = input.value.trim();
         if (q.length < 2) {
+            dropdown.scrollTop = 0;
             dropdown.classList.remove("open");
             return;
         }
@@ -1354,6 +1434,7 @@ function wireHotspotSearch() {
     });
 
     input.addEventListener("blur", () => {
+        dropdown.scrollTop = 0;
         dropdown.classList.remove("open");
     });
 
@@ -1432,7 +1513,7 @@ function renderPlanView() {
                     <span class="gain-group">
                         <span class="gain">+${marginalGains[i].toFixed(2)} marginal ${noun}</span>
                     </span>
-                    <button class="remove-itinerary-btn" data-index="${i}" title="Remove from itinerary">&times;</button>
+                    <button class="remove-itinerary-btn" data-index="${i}" title="Remove from itinerary"></button>
                 </div>
                 <div class="hotspot-body">
                     <div class="hotspot-meta">
@@ -1681,6 +1762,9 @@ let allSpecies = []; // loaded from API
 let selectedSpecies = null;
 let activeDropdownIndex = -1;
 
+// Ensure button is disabled on page load (browsers may persist form state)
+document.getElementById("optimize-btn").disabled = true;
+
 fetch("/api/species")
     .then(r => r.json())
     .then(data => { allSpecies = data; });
@@ -1735,11 +1819,14 @@ function renderSpeciesDropdown(matches) {
 function selectSpecies(sp) {
     selectedSpecies = sp;
     speciesInput.value = sp.comName;
+    speciesDropdown.scrollTop = 0;
     speciesDropdown.classList.remove("open");
-    document.getElementById("optimize-btn").disabled = false;
+    updateOptimizeBtn();
 }
 
 speciesInput.addEventListener("input", () => {
+    selectedSpecies = null;
+    updateOptimizeBtn();
     const q = speciesInput.value.trim();
     if (q.length < 2) {
         speciesDropdown.classList.remove("open");
@@ -1772,6 +1859,7 @@ speciesInput.addEventListener("keydown", (e) => {
 });
 
 speciesInput.addEventListener("blur", () => {
+    speciesDropdown.scrollTop = 0;
     speciesDropdown.classList.remove("open");
 });
 
