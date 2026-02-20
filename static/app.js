@@ -994,9 +994,21 @@ function renderMetrics() {
             </div>`}
         </div>`;
     } else {
+        // Calculate expected lifers as sum of marginal gains in itinerary order
+        const cMiss = {};
+        let expectedLifers = 0;
+        itinerary.forEach(h => {
+            h.target_species.forEach(sp => {
+                const miss = cMiss[sp.common_name] ?? 1;
+                expectedLifers += sp.probability * miss;
+                cMiss[sp.common_name] = miss * (1 - sp.probability);
+            });
+        });
+        const potentialLifers = Object.values(cMiss).filter(miss => (1 - miss) >= 0.001).length;
+
         metricsEl.innerHTML = `<div class="metrics">
             <div class="metric-card">
-                <div class="value">${data.total_expected_lifers}</div>
+                <div class="value">${expectedLifers.toFixed(2)}</div>
                 <div class="label">Expected ${noun}</div>
             </div>
             <div class="metric-card">
@@ -1005,7 +1017,7 @@ function renderMetrics() {
             </div>
             ${isSearch ? "" : `
             <div class="metric-card">
-                <div class="value">${data.num_potential_lifers}</div>
+                <div class="value">${potentialLifers}</div>
                 <div class="label">Potential ${noun}</div>
             </div>`}
         </div>`;
@@ -1083,31 +1095,6 @@ function renderExploreView() {
         `;
     });
 
-    // Combined species table
-    if (data.species_combined_probs && data.species_combined_probs.length > 0) {
-        const combinedRows = data.species_combined_probs.map(sp => `
-            <tr>
-                <td>${sp.common_name}</td>
-                <td>
-                    <span class="prob-bar" style="width: ${sp.probability * 100}px"></span>
-                    ${(sp.probability * 100).toFixed(1)}%
-                </td>
-            </tr>
-        `).join("");
-
-        html += `
-            <div class="section-title" style="margin-top: 1.5rem;">All Potential ${isSearch ? "Targets" : "Lifers"} (Combined Probability)</div>
-            <div class="hotspot-card">
-                <div style="padding: 1rem 1.25rem;">
-                    <table>
-                        <thead><tr><th>Species</th><th>Combined Probability</th></tr></thead>
-                        <tbody>${combinedRows}</tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-
     container.innerHTML = html;
 
     // Wire up hotspot card hover and click
@@ -1178,6 +1165,19 @@ function renderPlanView() {
         </div>
     `;
 
+    // Calculate marginal gains based on itinerary order
+    const cumulativeMiss = {}; // species -> product of (1 - p) for previous stops
+    const marginalGains = [];
+    itinerary.forEach(h => {
+        let gain = 0;
+        h.target_species.forEach(sp => {
+            const miss = cumulativeMiss[sp.common_name] ?? 1;
+            gain += sp.probability * miss;
+            cumulativeMiss[sp.common_name] = miss * (1 - sp.probability);
+        });
+        marginalGains.push(gain);
+    });
+
     itinerary.forEach((h, i) => {
         const rank = i + 1;
         const speciesRows = h.target_species.slice(0, 25).map(sp => `
@@ -1198,7 +1198,7 @@ function renderPlanView() {
                     <span class="rank">${rank}</span>
                     <span class="name">${h.locality}</span>
                     <span class="gain-group">
-                        <span class="gain">+${h.marginal_gain.toFixed(2)} expected ${noun}</span>
+                        <span class="gain">+${marginalGains[i].toFixed(2)} marginal ${noun}</span>
                     </span>
                     <button class="remove-itinerary-btn" data-index="${i}" title="Remove from itinerary">&times;</button>
                 </div>
@@ -1217,6 +1217,42 @@ function renderPlanView() {
             </div>
         `;
     });
+
+    // Combined species table from itinerary hotspots
+    const itineraryMiss = {};
+    itinerary.forEach(h => {
+        h.target_species.forEach(sp => {
+            itineraryMiss[sp.common_name] = (itineraryMiss[sp.common_name] ?? 1) * (1 - sp.probability);
+        });
+    });
+    const combinedProbs = Object.entries(itineraryMiss)
+        .map(([name, miss]) => ({ common_name: name, probability: 1 - miss }))
+        .filter(sp => sp.probability >= 0.001)
+        .sort((a, b) => b.probability - a.probability);
+
+    if (combinedProbs.length > 0) {
+        const combinedRows = combinedProbs.map(sp => `
+            <tr>
+                <td>${sp.common_name}</td>
+                <td>
+                    <span class="prob-bar" style="width: ${sp.probability * 100}px"></span>
+                    ${(sp.probability * 100).toFixed(1)}%
+                </td>
+            </tr>
+        `).join("");
+
+        html += `
+            <div class="section-title" style="margin-top: 1.5rem;">All Potential ${isSearch ? "Targets" : "Lifers"} (Combined Probability)</div>
+            <div class="hotspot-card">
+                <div style="padding: 1rem 1.25rem;">
+                    <table>
+                        <thead><tr><th>Species</th><th>Combined Probability</th></tr></thead>
+                        <tbody>${combinedRows}</tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
 
     container.innerHTML = html;
 
