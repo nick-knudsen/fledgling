@@ -1122,8 +1122,7 @@ function renderPlanView() {
                     <span class="rank">${rank}</span>
                     <span class="name">${h.locality}</span>
                     <span class="gain-group">
-                        <span class="gain">+${h.target_species.reduce((sum, sp) => sum + sp.probability, 0).toFixed(2)} ${noun}</span>
-                        <span class="gain-marginal">+${h.marginal_gain.toFixed(2)} marginal</span>
+                        <span class="gain">+${h.marginal_gain.toFixed(2)} expected ${noun}</span>
                     </span>
                     <button class="remove-itinerary-btn" data-index="${i}" title="Remove from itinerary">&times;</button>
                 </div>
