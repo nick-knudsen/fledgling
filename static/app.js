@@ -857,46 +857,72 @@ function renderResults(data) {
     const tiles = tileSets[theme];
     tileLayer = L.tileLayer(tiles.url, { attribution: tiles.attribution }).addTo(map);
 
-    updateMap();
+    updateMap(true);
     renderResultsView();
 }
 
-function updateMap() {
-    if (!map || !lastResultsData) return;
+function updateMap(fitToResults = false) {
+    if (!map) return;
 
     // Clear existing markers
     Object.values(markers).forEach(m => m.remove());
     markers = {};
 
-    const bounds = [];
+    const resultBounds = [];
+    const allBounds = [];
+    const resultIds = new Set();
 
-    lastResultsData.hotspots.forEach(h => {
-        const itineraryIdx = itinerary.findIndex(it => it.locality_id === h.locality_id);
-        const inItinerary = itineraryIdx !== -1;
-        const label = inItinerary ? String(itineraryIdx + 1) : String.fromCharCode(64 + h.rank);
-        const markerClass = inItinerary ? "map-marker-inner itinerary-marker" : "map-marker-inner";
+    // Collect all marker data, then add in z-order (lowest priority first)
+    const markerEntries = [];
 
+    if (lastResultsData) {
+        lastResultsData.hotspots.forEach(h => {
+            resultIds.add(h.locality_id);
+            const itineraryIdx = itinerary.findIndex(it => it.locality_id === h.locality_id);
+            const inItinerary = itineraryIdx !== -1;
+            const label = inItinerary ? String(itineraryIdx + 1) : String.fromCharCode(64 + h.rank);
+            const markerClass = inItinerary ? "map-marker-inner itinerary-marker" : "map-marker-inner";
+            const order = inItinerary ? itineraryIdx : h.rank;
+            markerEntries.push({ locality_id: h.locality_id, lat: h.latitude, lng: h.longitude, label, markerClass, inItinerary, order, isResult: true });
+            resultBounds.push([h.latitude, h.longitude]);
+            allBounds.push([h.latitude, h.longitude]);
+        });
+    }
+
+    itinerary.forEach((it, idx) => {
+        if (resultIds.has(it.locality_id)) return;
+        markerEntries.push({ locality_id: it.locality_id, lat: it.latitude, lng: it.longitude, label: String(idx + 1), markerClass: "map-marker-inner itinerary-marker", inItinerary: true, order: idx, isResult: false });
+        allBounds.push([it.latitude, it.longitude]);
+    });
+
+    // Sort: non-itinerary before itinerary, then higher order first (so lower order renders last = on top)
+    markerEntries.sort((a, b) => {
+        if (a.inItinerary !== b.inItinerary) return a.inItinerary ? 1 : -1;
+        return b.order - a.order;
+    });
+
+    markerEntries.forEach((e, i) => {
         const icon = L.divIcon({
             className: "map-marker",
-            html: `<div class="${markerClass}" data-locality-id="${h.locality_id}">${label}</div>`,
+            html: `<div class="${e.markerClass}" data-locality-id="${e.locality_id}">${e.label}</div>`,
             iconSize: [28, 28],
             iconAnchor: [14, 14],
         });
-        const marker = L.marker([h.latitude, h.longitude], { icon }).addTo(map);
-        markers[h.locality_id] = marker;
+        const marker = L.marker([e.lat, e.lng], { icon, zIndexOffset: i * 10 }).addTo(map);
+        markers[e.locality_id] = marker;
 
-        marker.on("mouseover", () => highlightHotspot(h.locality_id, true));
-        marker.on("mouseout", () => highlightHotspot(h.locality_id, false));
-        marker.on("click", () => toggleHotspotBody(h.locality_id, true));
-
-        bounds.push([h.latitude, h.longitude]);
+        marker.on("mouseover", () => highlightHotspot(e.locality_id, true));
+        marker.on("mouseout", () => highlightHotspot(e.locality_id, false));
+        marker.on("click", () => toggleHotspotBody(e.locality_id, true));
     });
 
     // Remove old fit control and add new one
     if (map._fitControl) { map.removeControl(map._fitControl); }
-    if (bounds.length > 0) {
-        map.fitBounds(bounds, { padding: [30, 30] });
-
+    const fitBounds = fitToResults && resultBounds.length > 0 ? resultBounds : allBounds;
+    if (fitToResults && fitBounds.length > 0) {
+        map.fitBounds(fitBounds, { padding: [30, 30] });
+    }
+    if (allBounds.length > 0) {
         const FitControl = L.Control.extend({
             options: { position: "topright" },
             onAdd() {
@@ -904,7 +930,7 @@ function updateMap() {
                 btn.title = "Zoom to fit all hotspots";
                 btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="1,5 1,1 5,1"/><polyline points="11,1 15,1 15,5"/><polyline points="15,11 15,15 11,15"/><polyline points="5,15 1,15 1,11"/></svg>`;
                 L.DomEvent.disableClickPropagation(btn);
-                btn.addEventListener("click", () => map.fitBounds(bounds, { padding: [30, 30] }));
+                btn.addEventListener("click", () => map.fitBounds(allBounds, { padding: [30, 30] }));
                 return btn;
             }
         });
