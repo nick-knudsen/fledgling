@@ -873,7 +873,7 @@ function updateMapForMode() {
     const bounds = [];
 
     hotspots.forEach((h, i) => {
-        const num = resultsMode === "plan" ? i + 1 : h.rank;
+        const num = resultsMode === "plan" ? i + 1 : String.fromCharCode(64 + h.rank);
         const icon = L.divIcon({
             className: "map-marker",
             html: `<div class="map-marker-inner" data-rank="${num}">${num}</div>`,
@@ -938,6 +938,7 @@ function renderExploreView() {
 
     data.hotspots.forEach(h => {
         const inItinerary = itinerary.some(it => it.locality_id === h.locality_id);
+        const letter = String.fromCharCode(64 + h.rank);
         const speciesRows = h.target_species.slice(0, 25).map(sp => `
             <tr>
                 <td>${sp.common_name}</td>
@@ -950,9 +951,9 @@ function renderExploreView() {
         `).join("");
 
         html += `
-            <div class="hotspot-card" data-rank="${h.rank}">
+            <div class="hotspot-card" data-rank="${letter}">
                 <div class="hotspot-header">
-                    <span class="rank">${h.rank}</span>
+                    <span class="rank">${letter}</span>
                     <span class="name">${h.locality}</span>
                     <span class="gain-group">
                         <span class="gain">+${h.target_species.reduce((sum, sp) => sum + sp.probability, 0).toFixed(2)} ${noun}</span>
@@ -1008,7 +1009,7 @@ function renderExploreView() {
 
     // Wire up hotspot card hover and click
     container.querySelectorAll(".hotspot-card[data-rank]").forEach(card => {
-        const rank = parseInt(card.dataset.rank);
+        const rank = card.dataset.rank;
         const header = card.querySelector(".hotspot-header");
 
         header.addEventListener("click", (e) => {
