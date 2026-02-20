@@ -323,6 +323,57 @@ td { padding: 0.4rem 0; border-bottom: 1px solid var(--border-light); }
     color: var(--text-secondary); font-style: italic; font-size: 0.8rem;
     margin-left: 0.35rem;
 }
+/* Results mode toggle (Explore / Plan) */
+.results-mode-toggle {
+    display: flex; border: 1px solid var(--input-border); border-radius: 6px;
+    overflow: hidden; margin-bottom: 1rem;
+}
+.results-mode-btn {
+    flex: 1; padding: 0.4rem; font-size: 0.85rem; font-weight: 500;
+    border: none; background: var(--input-bg); color: var(--text-secondary);
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+}
+.results-mode-btn:not(:last-child) { border-right: 1px solid var(--input-border); }
+.results-mode-btn:hover { background: var(--hover); }
+.results-mode-btn.active { background: var(--accent); color: #fff; }
+
+/* Add to itinerary button */
+.add-itinerary-btn, .added-itinerary-btn {
+    width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--input-border);
+    font-size: 1.1rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+    margin-left: 0.75rem; flex-shrink: 0; transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.add-itinerary-btn {
+    background: var(--input-bg); color: var(--text-secondary); cursor: pointer;
+}
+.add-itinerary-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--hover); }
+.added-itinerary-btn {
+    background: var(--hover); color: var(--success); border-color: var(--success);
+    cursor: default; font-size: 0.85rem;
+}
+
+/* Drag handle */
+.drag-handle {
+    font-size: 1.1rem; color: var(--text-secondary); cursor: grab; margin-right: 0.5rem;
+    user-select: none; flex-shrink: 0;
+}
+.drag-handle:active { cursor: grabbing; }
+
+/* Remove from itinerary button */
+.remove-itinerary-btn {
+    width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--input-border);
+    font-size: 1.2rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+    margin-left: 0.75rem; flex-shrink: 0;
+    background: var(--input-bg); color: var(--text-secondary); cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.remove-itinerary-btn:hover { border-color: #d32f2f; color: #d32f2f; background: var(--hover); }
+html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; color: #ef5350; }
+
+/* Drag states */
+.hotspot-card.dragging { opacity: 0.4; }
+.hotspot-card.drag-over { border-top: 2px solid var(--accent); }
+
 .empty-state {
     text-align: center; color: var(--text-empty); padding: 4rem 2rem;
     font-size: 1rem;

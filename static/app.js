@@ -15,6 +15,9 @@ let regionNames = {}; // code -> display name, loaded from API
 let map = null;
 let tileLayer = null;
 let markers = {}; // rank -> L.marker
+let itinerary = []; // ordered array of hotspot data objects
+let resultsMode = "explore"; // "explore" or "plan"
+let lastResultsData = null;
 
 applyTheme(getSystemTheme());
 
@@ -794,6 +797,7 @@ async function runOptimization() {
 
 function renderResults(data) {
     const el = document.getElementById("results");
+    lastResultsData = data;
 
     const isSearch = targetMode === "search";
     const noun = (!isSearch && listType === "life") ? "lifers" : "targets";
@@ -806,6 +810,10 @@ function renderResults(data) {
     let html = `
         <div class="results-layout">
         <div class="results-list">
+        <div class="results-mode-toggle">
+            <button class="results-mode-btn${resultsMode === "explore" ? " active" : ""}" data-mode="explore">Explore</button>
+            <button class="results-mode-btn${resultsMode === "plan" ? " active" : ""}" data-mode="plan">Plan</button>
+        </div>
         <div class="metrics">
             <div class="metric-card">
                 <div class="value">${data.total_expected_lifers}</div>
@@ -822,6 +830,102 @@ function renderResults(data) {
             </div>
             `}
         </div>
+        <div id="results-view-container"></div>
+        </div>
+        <div class="results-map"><div id="map"></div></div>
+        </div>
+    `;
+
+    el.innerHTML = html;
+
+    // Wire up mode toggle
+    document.querySelectorAll(".results-mode-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".results-mode-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            resultsMode = btn.dataset.mode;
+            renderResultsView();
+            updateMapForMode();
+        });
+    });
+
+    // Initialize map
+    if (map) { map.remove(); map = null; }
+
+    map = L.map("map");
+    const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    const tiles = tileSets[theme];
+    tileLayer = L.tileLayer(tiles.url, { attribution: tiles.attribution }).addTo(map);
+
+    updateMapForMode();
+    renderResultsView();
+}
+
+function updateMapForMode() {
+    if (!map || !lastResultsData) return;
+
+    // Clear existing markers
+    Object.values(markers).forEach(m => m.remove());
+    markers = {};
+
+    const hotspots = resultsMode === "plan" ? itinerary : lastResultsData.hotspots;
+    const bounds = [];
+
+    hotspots.forEach((h, i) => {
+        const num = resultsMode === "plan" ? i + 1 : h.rank;
+        const icon = L.divIcon({
+            className: "map-marker",
+            html: `<div class="map-marker-inner" data-rank="${num}">${num}</div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+        });
+        const marker = L.marker([h.latitude, h.longitude], { icon }).addTo(map);
+        markers[num] = marker;
+
+        marker.on("mouseover", () => highlightHotspot(num, true));
+        marker.on("mouseout", () => highlightHotspot(num, false));
+        marker.on("click", () => toggleHotspotBody(num, true));
+
+        bounds.push([h.latitude, h.longitude]);
+    });
+
+    // Remove old fit control and add new one
+    if (map._fitControl) { map.removeControl(map._fitControl); }
+    if (bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [30, 30] });
+
+        const FitControl = L.Control.extend({
+            options: { position: "topright" },
+            onAdd() {
+                const btn = L.DomUtil.create("button", "map-fit-btn");
+                btn.title = "Zoom to fit all hotspots";
+                btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="1,5 1,1 5,1"/><polyline points="11,1 15,1 15,5"/><polyline points="15,11 15,15 11,15"/><polyline points="5,15 1,15 1,11"/></svg>`;
+                L.DomEvent.disableClickPropagation(btn);
+                btn.addEventListener("click", () => map.fitBounds(bounds, { padding: [30, 30] }));
+                return btn;
+            }
+        });
+        map._fitControl = new FitControl();
+        map.addControl(map._fitControl);
+    }
+}
+
+function renderResultsView() {
+    if (resultsMode === "explore") {
+        renderExploreView();
+    } else {
+        renderPlanView();
+    }
+}
+
+function renderExploreView() {
+    const data = lastResultsData;
+    if (!data) return;
+    const container = document.getElementById("results-view-container");
+    const isSearch = targetMode === "search";
+    const noun = (!isSearch && listType === "life") ? "lifers" : "targets";
+
+    let html = `
         <div class="section-title-row">
             <div class="section-title">Recommended Hotspots</div>
             <div class="expand-collapse-btns">
@@ -832,6 +936,7 @@ function renderResults(data) {
     `;
 
     data.hotspots.forEach(h => {
+        const inItinerary = itinerary.some(it => it.locality_id === h.locality_id);
         const speciesRows = h.target_species.slice(0, 25).map(sp => `
             <tr>
                 <td>${sp.common_name}</td>
@@ -852,6 +957,9 @@ function renderResults(data) {
                         <span class="gain">+${h.target_species.reduce((sum, sp) => sum + sp.probability, 0).toFixed(2)} ${noun}</span>
                         <span class="gain-marginal">+${h.marginal_gain.toFixed(2)} marginal</span>
                     </span>
+                    <button class="${inItinerary ? "added-itinerary-btn" : "add-itinerary-btn"}" data-locality-id="${h.locality_id}" title="${inItinerary ? "Added to itinerary" : "Add to itinerary"}">
+                        ${inItinerary ? "&#10003;" : "+"}
+                    </button>
                 </div>
                 <div class="hotspot-body">
                     <div class="hotspot-meta">
@@ -895,69 +1003,37 @@ function renderResults(data) {
         `;
     }
 
-    html += `
-        </div>
-        <div class="results-map"><div id="map"></div></div>
-        </div>
-    `;
-
-    el.innerHTML = html;
-
-    // Initialize map
-    if (map) { map.remove(); map = null; }
-
-    map = L.map("map");
-    const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-    const tiles = tileSets[theme];
-    tileLayer = L.tileLayer(tiles.url, { attribution: tiles.attribution }).addTo(map);
-
-    markers = {};
-    const bounds = [];
-    data.hotspots.forEach(h => {
-        const icon = L.divIcon({
-            className: "map-marker",
-            html: `<div class="map-marker-inner" data-rank="${h.rank}">${h.rank}</div>`,
-            iconSize: [28, 28],
-            iconAnchor: [14, 14],
-        });
-        const marker = L.marker([h.latitude, h.longitude], { icon }).addTo(map);
-        markers[h.rank] = marker;
-
-        marker.on("mouseover", () => highlightHotspot(h.rank, true));
-        marker.on("mouseout", () => highlightHotspot(h.rank, false));
-        marker.on("click", () => toggleHotspotBody(h.rank, true));
-
-        bounds.push([h.latitude, h.longitude]);
-    });
-
-    if (bounds.length > 0) {
-        map.fitBounds(bounds, { padding: [30, 30] });
-
-        const FitControl = L.Control.extend({
-            options: { position: "topright" },
-            onAdd() {
-                const btn = L.DomUtil.create("button", "map-fit-btn");
-                btn.title = "Zoom to fit all hotspots";
-                btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="1,5 1,1 5,1"/><polyline points="11,1 15,1 15,5"/><polyline points="15,11 15,15 11,15"/><polyline points="5,15 1,15 1,11"/></svg>`;
-                L.DomEvent.disableClickPropagation(btn);
-                btn.addEventListener("click", () => map.fitBounds(bounds, { padding: [30, 30] }));
-                return btn;
-            }
-        });
-        map.addControl(new FitControl());
-    }
+    container.innerHTML = html;
 
     // Wire up hotspot card hover and click
-    document.querySelectorAll(".hotspot-card[data-rank]").forEach(card => {
+    container.querySelectorAll(".hotspot-card[data-rank]").forEach(card => {
         const rank = parseInt(card.dataset.rank);
         const header = card.querySelector(".hotspot-header");
 
-        header.addEventListener("click", () => toggleHotspotBody(rank));
+        header.addEventListener("click", (e) => {
+            if (e.target.closest(".add-itinerary-btn") || e.target.closest(".added-itinerary-btn")) return;
+            toggleHotspotBody(rank);
+        });
         card.addEventListener("mouseenter", () => highlightHotspot(rank, true));
         card.addEventListener("mouseleave", () => highlightHotspot(rank, false));
     });
 
-    document.querySelectorAll(".exclude-btn").forEach(btn => {
+    // Wire up add-to-itinerary buttons
+    container.querySelectorAll(".add-itinerary-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const localityId = parseInt(btn.dataset.localityId);
+            const hotspot = data.hotspots.find(h => h.locality_id === localityId);
+            if (hotspot && !itinerary.some(it => it.locality_id === localityId)) {
+                itinerary.push(hotspot);
+                btn.className = "added-itinerary-btn";
+                btn.innerHTML = "&#10003;";
+                btn.title = "Added to itinerary";
+            }
+        });
+    });
+
+    container.querySelectorAll(".exclude-btn").forEach(btn => {
         btn.addEventListener("click", (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -968,10 +1044,154 @@ function renderResults(data) {
     });
 
     document.getElementById("expand-all-btn").addEventListener("click", () => {
-        document.querySelectorAll(".hotspot-card[data-rank] .hotspot-body").forEach(b => b.classList.add("open"));
+        container.querySelectorAll(".hotspot-card[data-rank] .hotspot-body").forEach(b => b.classList.add("open"));
     });
     document.getElementById("collapse-all-btn").addEventListener("click", () => {
-        document.querySelectorAll(".hotspot-card[data-rank] .hotspot-body").forEach(b => b.classList.remove("open"));
+        container.querySelectorAll(".hotspot-card[data-rank] .hotspot-body").forEach(b => b.classList.remove("open"));
+    });
+}
+
+function renderPlanView() {
+    const container = document.getElementById("results-view-container");
+    const isSearch = targetMode === "search";
+    const noun = (!isSearch && listType === "life") ? "lifers" : "targets";
+
+    if (itinerary.length === 0) {
+        container.innerHTML = `<div class="empty-state"><p>Add hotspots from the Explore tab to build your itinerary.</p></div>`;
+        return;
+    }
+
+    let html = `
+        <div class="section-title-row">
+            <div class="section-title">Your Itinerary</div>
+            <div class="expand-collapse-btns">
+                <button class="expand-collapse-btn" id="expand-all-btn">Expand All</button>
+                <button class="expand-collapse-btn" id="collapse-all-btn">Collapse All</button>
+            </div>
+        </div>
+    `;
+
+    itinerary.forEach((h, i) => {
+        const rank = i + 1;
+        const speciesRows = h.target_species.slice(0, 25).map(sp => `
+            <tr>
+                <td>${sp.common_name}</td>
+                <td>
+                    <span class="prob-bar" style="width: ${sp.probability * 100}px"></span>
+                    ${(sp.probability * 100).toFixed(1)}%
+                </td>
+                <td>${sp.recently_observed ? "\u2705" : "\u274C"}</td>
+            </tr>
+        `).join("");
+
+        html += `
+            <div class="hotspot-card plan-card" data-rank="${rank}" data-index="${i}" draggable="true">
+                <div class="hotspot-header">
+                    <span class="drag-handle" title="Drag to reorder">&#9776;</span>
+                    <span class="rank">${rank}</span>
+                    <span class="name">${h.locality}</span>
+                    <span class="gain-group">
+                        <span class="gain">+${h.target_species.reduce((sum, sp) => sum + sp.probability, 0).toFixed(2)} ${noun}</span>
+                        <span class="gain-marginal">+${h.marginal_gain.toFixed(2)} marginal</span>
+                    </span>
+                    <button class="remove-itinerary-btn" data-index="${i}" title="Remove from itinerary">&times;</button>
+                </div>
+                <div class="hotspot-body">
+                    <div class="hotspot-meta">
+                        ${h.county} &middot;
+                        ${h.latitude.toFixed(4)}, ${h.longitude.toFixed(4)} &middot;
+                        <a href="https://ebird.org/hotspot/L${h.locality_id}" target="_blank" rel="noopener">View on eBird</a> &middot;
+                        <a href="https://www.google.com/maps/search/${encodeURIComponent(h.locality)}/@${h.latitude},${h.longitude},15z" target="_blank" rel="noopener">View on Google Maps</a>
+                    </div>
+                    <table>
+                        <thead><tr><th>Species</th><th>Detection Probability</th><th>Observed in Last 30 Days?</th></tr></thead>
+                        <tbody>${speciesRows}</tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+
+    // Wire up card interactions
+    container.querySelectorAll(".plan-card").forEach(card => {
+        const rank = parseInt(card.dataset.rank);
+        const header = card.querySelector(".hotspot-header");
+
+        header.addEventListener("click", (e) => {
+            if (e.target.closest(".drag-handle") || e.target.closest(".remove-itinerary-btn")) return;
+            toggleHotspotBody(rank);
+        });
+        card.addEventListener("mouseenter", () => highlightHotspot(rank, true));
+        card.addEventListener("mouseleave", () => highlightHotspot(rank, false));
+    });
+
+    // Wire up remove buttons
+    container.querySelectorAll(".remove-itinerary-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const idx = parseInt(btn.dataset.index);
+            itinerary.splice(idx, 1);
+            renderPlanView();
+            updateMapForMode();
+        });
+    });
+
+    // Drag and drop reordering
+    let dragSrcIndex = null;
+
+    // Track whether drag started from handle
+    let dragFromHandle = false;
+    container.querySelectorAll(".drag-handle").forEach(handle => {
+        handle.addEventListener("mousedown", () => { dragFromHandle = true; });
+    });
+    document.addEventListener("mouseup", () => { dragFromHandle = false; }, { once: false });
+
+    container.querySelectorAll(".plan-card").forEach(card => {
+        card.addEventListener("dragstart", (e) => {
+            if (!dragFromHandle) {
+                e.preventDefault();
+                return;
+            }
+            dragSrcIndex = parseInt(card.dataset.index);
+            card.classList.add("dragging");
+            e.dataTransfer.effectAllowed = "move";
+        });
+
+        card.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            container.querySelectorAll(".plan-card").forEach(c => c.classList.remove("drag-over"));
+            card.classList.add("drag-over");
+        });
+
+        card.addEventListener("drop", (e) => {
+            e.preventDefault();
+            const dropIndex = parseInt(card.dataset.index);
+            if (dragSrcIndex !== null && dragSrcIndex !== dropIndex) {
+                const [moved] = itinerary.splice(dragSrcIndex, 1);
+                itinerary.splice(dropIndex, 0, moved);
+                renderPlanView();
+                updateMapForMode();
+            }
+        });
+
+        card.addEventListener("dragend", () => {
+            dragSrcIndex = null;
+            container.querySelectorAll(".plan-card").forEach(c => {
+                c.classList.remove("dragging");
+                c.classList.remove("drag-over");
+            });
+        });
+    });
+
+    // Expand/collapse all
+    document.getElementById("expand-all-btn").addEventListener("click", () => {
+        container.querySelectorAll(".plan-card .hotspot-body").forEach(b => b.classList.add("open"));
+    });
+    document.getElementById("collapse-all-btn").addEventListener("click", () => {
+        container.querySelectorAll(".plan-card .hotspot-body").forEach(b => b.classList.remove("open"));
     });
 }
 
