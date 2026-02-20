@@ -11,11 +11,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 import duckdb
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from hotspot_optimizer import optimize_hotspots
+from hotspot_optimizer import optimize_hotspots, load_probability_matrix, date_range_to_days_of_year
 
 DB_PATH = "data/combined.duckdb"
 
@@ -282,6 +282,124 @@ def run_optimization(req: OptimizeRequest):
             for sp in result.species_combined_probs
         ],
     }
+
+
+@app.get("/api/search-hotspots")
+def search_hotspots(
+    q: str,
+    country: str | None = None,
+    states: str | None = None,
+    state_counties: str | None = None,
+    limit: int = 10,
+):
+    """Search hotspots by name for autocomplete."""
+    if len(q) < 2:
+        return []
+
+    safe_q = q.replace("'", "''")
+
+    geo_filter = "1=1"
+    if state_counties:
+        pairs = []
+        for pair in state_counties.split(","):
+            parts = pair.split("|")
+            if len(parts) == 2:
+                s, c = parts[0].replace("'", "''"), parts[1].replace("'", "''")
+                pairs.append(f"(state = '{s}' AND county = '{c}')")
+        if pairs:
+            geo_filter = f"({' OR '.join(pairs)})"
+    elif states:
+        state_list = ", ".join(f"'{s.replace(chr(39), chr(39)+chr(39))}'" for s in states.split(","))
+        geo_filter = f"state IN ({state_list})"
+    elif country:
+        geo_filter = f"country = '{country.replace(chr(39), chr(39)+chr(39))}'"
+
+    con = duckdb.connect(DB_PATH, read_only=True)
+    try:
+        rows = con.execute(
+            f"SELECT locality_id, locality, latitude, longitude, county, state "
+            f"FROM hotspots WHERE locality ILIKE '%{safe_q}%' AND {geo_filter} "
+            f"ORDER BY locality LIMIT {limit}"
+        ).fetchall()
+    finally:
+        con.close()
+
+    return [
+        {
+            "locality_id": r[0],
+            "locality": r[1],
+            "latitude": r[2],
+            "longitude": r[3],
+            "county": r[4],
+            "state": r[5],
+        }
+        for r in rows
+    ]
+
+
+class HotspotDetailRequest(BaseModel):
+    locality_id: int
+    start_date: date
+    end_date: date
+    life_list: list[str] = []
+    target_species: str | None = None
+
+
+@app.post("/api/hotspot-details")
+def get_hotspot_details(req: HotspotDetailRequest):
+    """Fetch full species probability data for a single hotspot."""
+    days_of_year = date_range_to_days_of_year(req.start_date, req.end_date)
+
+    con = duckdb.connect(DB_PATH, read_only=True)
+    try:
+        hotspot_info, prob_matrix, species_list = load_probability_matrix(
+            con, days_of_year, req.life_list,
+            locality_ids=[req.locality_id],
+            target_species=req.target_species,
+        )
+    finally:
+        con.close()
+
+    if prob_matrix.size == 0:
+        # No species data — return basic hotspot info
+        con = duckdb.connect(DB_PATH, read_only=True)
+        try:
+            row = con.execute(
+                f"SELECT locality_id, locality, latitude, longitude, county "
+                f"FROM hotspots WHERE locality_id = {req.locality_id}"
+            ).fetchone()
+        finally:
+            con.close()
+        if not row:
+            raise HTTPException(status_code=404, detail="Hotspot not found")
+        return {
+            "locality_id": row[0],
+            "locality": row[1],
+            "latitude": row[2],
+            "longitude": row[3],
+            "county": row[4],
+            "target_species": [],
+        }
+
+    target_species = []
+    for s_idx, sp_name in enumerate(species_list):
+        p = float(prob_matrix[0, s_idx])
+        if p >= 0.001:
+            target_species.append({"common_name": sp_name, "probability": round(p, 4)})
+    target_species.sort(key=lambda x: x["probability"], reverse=True)
+
+    row = hotspot_info.iloc[0]
+    result = {
+        "locality_id": int(row["locality_id"]),
+        "locality": row["locality"],
+        "latitude": float(row["latitude"]),
+        "longitude": float(row["longitude"]),
+        "county": row["county"],
+        "target_species": target_species,
+    }
+
+    result = add_recent_observations([result])[0]
+    return result
 
 
 # Serve the frontend

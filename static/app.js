@@ -20,6 +20,8 @@ let resultsMode = "explore"; // "explore" or "plan"
 let lastResultsData = null;
 let isDragging = false;
 let routeLine = null;
+let hotspotSearchTimeout = null;
+let activeHotspotSearchIndex = -1;
 
 applyTheme(getSystemTheme());
 
@@ -1220,13 +1222,165 @@ function renderExploreView() {
     });
 }
 
+function getGeoFilterParams() {
+    const params = new URLSearchParams();
+    if (searchMode === "region") {
+        const counties = Array.from(selectedCounties);
+        const states = Array.from(selectedStates);
+        const countries = Array.from(selectedCountries);
+        if (counties.length > 0) {
+            params.set("state_counties", counties.join(","));
+        } else if (states.length > 0) {
+            params.set("states", states.join(","));
+        } else if (countries.length === 1) {
+            params.set("country", countries[0]);
+        }
+    }
+    return params;
+}
+
+async function fetchHotspotSuggestions(query) {
+    const params = getGeoFilterParams();
+    params.set("q", query);
+    try {
+        const resp = await fetch(`/api/search-hotspots?${params.toString()}`);
+        const results = await resp.json();
+        renderHotspotSearchDropdown(results);
+    } catch {
+        const dropdown = document.getElementById("hotspot-search-dropdown");
+        if (dropdown) dropdown.classList.remove("open");
+    }
+}
+
+function renderHotspotSearchDropdown(results) {
+    const dropdown = document.getElementById("hotspot-search-dropdown");
+    if (!dropdown) return;
+    dropdown.innerHTML = "";
+    activeHotspotSearchIndex = -1;
+
+    // Filter out hotspots already in itinerary
+    const filtered = results.filter(r => !itinerary.some(it => it.locality_id === r.locality_id));
+
+    if (filtered.length === 0) {
+        dropdown.classList.remove("open");
+        return;
+    }
+
+    filtered.forEach(r => {
+        const item = document.createElement("div");
+        item.className = "hotspot-search-dropdown-item";
+        item.innerHTML = `${r.locality}<span class="hotspot-search-county">${r.county}</span>`;
+        item.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            selectHotspotFromSearch(r);
+        });
+        dropdown.appendChild(item);
+    });
+    dropdown.classList.add("open");
+}
+
+async function selectHotspotFromSearch(summary) {
+    const input = document.getElementById("hotspot-search-input");
+    const dropdown = document.getElementById("hotspot-search-dropdown");
+    if (input) input.value = "";
+    if (dropdown) dropdown.classList.remove("open");
+
+    if (itinerary.some(it => it.locality_id === summary.locality_id)) return;
+
+    const body = {
+        locality_id: summary.locality_id,
+        start_date: getDateValue("start"),
+        end_date: getDateValue("end"),
+    };
+
+    if (targetMode === "search" && selectedSpecies) {
+        body.target_species = selectedSpecies.comName;
+    } else {
+        body.life_list = lifeList;
+    }
+
+    try {
+        const resp = await fetch("/api/hotspot-details", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        if (!resp.ok) return;
+        const hotspot = await resp.json();
+
+        if (!itinerary.some(it => it.locality_id === hotspot.locality_id)) {
+            itinerary.push(hotspot);
+            renderResultsView();
+            updateMap();
+        }
+    } catch (err) {
+        console.error("Error fetching hotspot details:", err);
+    }
+}
+
+function wireHotspotSearch() {
+    const input = document.getElementById("hotspot-search-input");
+    const dropdown = document.getElementById("hotspot-search-dropdown");
+    if (!input) return;
+
+    input.addEventListener("input", () => {
+        const q = input.value.trim();
+        if (q.length < 2) {
+            dropdown.classList.remove("open");
+            return;
+        }
+        clearTimeout(hotspotSearchTimeout);
+        hotspotSearchTimeout = setTimeout(() => fetchHotspotSuggestions(q), 300);
+    });
+
+    input.addEventListener("keydown", (e) => {
+        const items = dropdown.querySelectorAll(".hotspot-search-dropdown-item");
+        if (!items.length) return;
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            activeHotspotSearchIndex = Math.min(activeHotspotSearchIndex + 1, items.length - 1);
+            items.forEach((el, i) => el.classList.toggle("active", i === activeHotspotSearchIndex));
+            items[activeHotspotSearchIndex].scrollIntoView({ block: "nearest" });
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            activeHotspotSearchIndex = Math.max(activeHotspotSearchIndex - 1, 0);
+            items.forEach((el, i) => el.classList.toggle("active", i === activeHotspotSearchIndex));
+            items[activeHotspotSearchIndex].scrollIntoView({ block: "nearest" });
+        } else if (e.key === "Enter" && activeHotspotSearchIndex >= 0) {
+            e.preventDefault();
+            items[activeHotspotSearchIndex].dispatchEvent(new MouseEvent("mousedown"));
+        }
+    });
+
+    input.addEventListener("blur", () => {
+        dropdown.classList.remove("open");
+    });
+
+    input.addEventListener("focus", () => {
+        if (dropdown.children.length > 0) {
+            dropdown.classList.add("open");
+        }
+    });
+}
+
 function renderPlanView() {
     const container = document.getElementById("results-view-container");
     const isSearch = targetMode === "search";
     const noun = (!isSearch && listType === "life") ? "lifers" : "targets";
 
+    const searchHtml = `
+        <div class="hotspot-search">
+            <input type="text" id="hotspot-search-input"
+                   placeholder="Search for a hotspot to add..."
+                   autocomplete="off" />
+            <div class="hotspot-search-dropdown" id="hotspot-search-dropdown"></div>
+        </div>
+    `;
+
     if (itinerary.length === 0) {
-        container.innerHTML = `<div class="empty-state"><p>Add hotspots from the Explore tab to build your itinerary.</p></div>`;
+        container.innerHTML = searchHtml + `<div class="empty-state"><p>Add hotspots from the Explore tab or search above to build your itinerary.</p></div>`;
+        wireHotspotSearch();
         updateDrivingTime();
         return;
     }
@@ -1240,6 +1394,8 @@ function renderPlanView() {
             </div>
         </div>
     `;
+
+    html += searchHtml;
 
     // Calculate marginal gains based on itinerary order
     const cumulativeMiss = {}; // species -> product of (1 - p) for previous stops
@@ -1331,6 +1487,7 @@ function renderPlanView() {
     }
 
     container.innerHTML = html;
+    wireHotspotSearch();
 
     // Wire up card interactions
     container.querySelectorAll(".plan-card").forEach(card => {

@@ -195,7 +195,7 @@ button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
 .results-layout { display: flex; flex-direction: column; }
 .results-map { order: -1; position: sticky; top: 0; z-index: 2; background: var(--bg); padding-top: 1.5rem; }
 #map { height: 350px; border-radius: 8px; border: 1px solid var(--border); }
-.results-list { padding-top: 1.5rem; }
+.results-list { padding-top: 1.5rem; padding-bottom: 40vh; }
 .map-marker { background: none; border: none; }
 .map-marker-inner {
     width: 28px; height: 28px; border-radius: 50%;
@@ -329,6 +329,30 @@ td { padding: 0.4rem 0; border-bottom: 1px solid var(--border-light); }
     color: var(--text-secondary); font-style: italic; font-size: 0.8rem;
     margin-left: 0.35rem;
 }
+/* Hotspot search in Plan tab */
+.hotspot-search { position: relative; margin-bottom: 1rem; }
+.hotspot-search input {
+    width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--input-border);
+    border-radius: 6px; font-size: 0.9rem; background: var(--input-bg); color: var(--text);
+    box-sizing: border-box;
+}
+.hotspot-search-dropdown {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--bg-surface); border: 1px solid var(--input-border);
+    border-radius: 6px; margin-top: 2px; max-height: 14rem; overflow-y: auto;
+    z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.hotspot-search-dropdown.open { display: block; }
+.hotspot-search-dropdown-item {
+    padding: 0.45rem 0.75rem; cursor: pointer; font-size: 0.85rem;
+}
+.hotspot-search-dropdown-item:hover, .hotspot-search-dropdown-item.active {
+    background: var(--hover);
+}
+.hotspot-search-dropdown-item .hotspot-search-county {
+    color: var(--text-secondary); font-size: 0.8rem; margin-left: 0.35rem;
+}
+
 /* Results mode toggle (Explore / Plan) */
 .results-mode-toggle {
     display: flex; border: 1px solid var(--input-border); border-radius: 6px;
