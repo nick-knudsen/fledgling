@@ -862,13 +862,27 @@ function updateMap(fitToResults = false) {
     const markerEntries = [];
 
     if (lastResultsData) {
+        // Compute adjusted ranking by marginal gain accounting for itinerary
+        const itinMiss = {};
+        itinerary.forEach(h => {
+            h.target_species.forEach(sp => {
+                itinMiss[sp.common_name] = (itinMiss[sp.common_name] ?? 1) * (1 - sp.probability);
+            });
+        });
+        const rankedIds = [...lastResultsData.hotspots]
+            .map(h => ({ locality_id: h.locality_id, gain: h.target_species.reduce((sum, sp) => sum + sp.probability * (itinMiss[sp.common_name] ?? 1), 0) }))
+            .sort((a, b) => b.gain - a.gain);
+        const rankMap = {};
+        rankedIds.forEach((r, i) => { rankMap[r.locality_id] = i; });
+
         lastResultsData.hotspots.forEach(h => {
             resultIds.add(h.locality_id);
             const itineraryIdx = itinerary.findIndex(it => it.locality_id === h.locality_id);
             const inItinerary = itineraryIdx !== -1;
-            const label = inItinerary ? String(itineraryIdx + 1) : String.fromCharCode(64 + h.rank);
+            const adjRank = rankMap[h.locality_id];
+            const label = inItinerary ? String(itineraryIdx + 1) : String.fromCharCode(65 + adjRank);
             const markerClass = inItinerary ? "map-marker-inner itinerary-marker" : "map-marker-inner";
-            const order = inItinerary ? itineraryIdx : h.rank;
+            const order = inItinerary ? itineraryIdx : adjRank;
             markerEntries.push({ locality_id: h.locality_id, lat: h.latitude, lng: h.longitude, label, markerClass, inItinerary, order, isResult: true });
             resultBounds.push([h.latitude, h.longitude]);
             allBounds.push([h.latitude, h.longitude]);
@@ -926,6 +940,8 @@ function updateMap(fitToResults = false) {
 }
 
 let routeRequestId = 0;
+let lastRouteKey = null;
+let lastDrivingTime = "—";
 
 function clearRoute() {
     if (routeLine) { routeLine.remove(); routeLine = null; }
@@ -933,13 +949,24 @@ function clearRoute() {
 
 async function updateDrivingTime() {
     const el = document.getElementById("driving-time-value");
+    if (!el) return;
+
+    const routeKey = itinerary.map(h => h.locality_id).join(",");
+    if (routeKey === lastRouteKey) {
+        el.textContent = lastDrivingTime;
+        return;
+    }
+
     clearRoute();
+    lastRouteKey = routeKey;
     const requestId = ++routeRequestId;
     if (!el) return;
     if (itinerary.length < 2) {
-        el.textContent = "—";
+        lastDrivingTime = "—";
+        el.textContent = lastDrivingTime;
         return;
     }
+    el.textContent = "...";
     const coords = itinerary.map(h => `${h.longitude},${h.latitude}`).join(";");
     try {
         const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`);
@@ -949,7 +976,8 @@ async function updateDrivingTime() {
             const seconds = data.routes[0].duration;
             const hours = Math.floor(seconds / 3600);
             const minutes = Math.round((seconds % 3600) / 60);
-            el.textContent = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+            lastDrivingTime = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+            el.textContent = lastDrivingTime;
 
             if (map) {
                 const geojson = data.routes[0].geometry;
@@ -959,10 +987,12 @@ async function updateDrivingTime() {
                 }).addTo(map);
             }
         } else {
-            el.textContent = "N/A";
+            lastDrivingTime = "N/A";
+            el.textContent = lastDrivingTime;
         }
     } catch {
-        el.textContent = "N/A";
+        lastDrivingTime = "N/A";
+        el.textContent = lastDrivingTime;
     }
 }
 
@@ -1051,9 +1081,28 @@ function renderExploreView() {
         </div>
     `;
 
-    data.hotspots.forEach(h => {
+    // Cumulative miss probabilities from itinerary
+    const itinMiss = {};
+    itinerary.forEach(h => {
+        h.target_species.forEach(sp => {
+            itinMiss[sp.common_name] = (itinMiss[sp.common_name] ?? 1) * (1 - sp.probability);
+        });
+    });
+
+    // Compute marginal gains and sort by them
+    const ranked = data.hotspots.map(h => ({
+        ...h,
+        marginalGainAdj: h.target_species.reduce((sum, sp) => {
+            const miss = itinMiss[sp.common_name] ?? 1;
+            return sum + sp.probability * miss;
+        }, 0),
+    }));
+    ranked.sort((a, b) => b.marginalGainAdj - a.marginalGainAdj);
+
+    ranked.forEach((h, i) => {
         const inItinerary = itinerary.some(it => it.locality_id === h.locality_id);
-        const letter = String.fromCharCode(64 + h.rank);
+        const letter = String.fromCharCode(65 + i);
+        const marginalGain = h.marginalGainAdj;
         const speciesRows = h.target_species.slice(0, 25).map(sp => `
             <tr>
                 <td>${sp.common_name}</td>
@@ -1072,7 +1121,7 @@ function renderExploreView() {
                     <span class="name">${h.locality}</span>
                     <span class="gain-group">
                         <span class="gain">+${h.target_species.reduce((sum, sp) => sum + sp.probability, 0).toFixed(2)} ${noun}</span>
-                        <span class="gain-marginal">+${h.marginal_gain.toFixed(2)} marginal</span>
+                        <span class="gain-marginal">+${marginalGain.toFixed(2)} marginal</span>
                     </span>
                     <button class="${inItinerary ? "added-itinerary-btn" : "add-itinerary-btn"}" data-locality-id="${h.locality_id}" title="${inItinerary ? "Added to itinerary" : "Add to itinerary"}">
                         ${inItinerary ? "&#10003;" : "+"}
@@ -1117,11 +1166,38 @@ function renderExploreView() {
             const localityId = parseInt(btn.dataset.localityId);
             const hotspot = data.hotspots.find(h => h.locality_id === localityId);
             if (hotspot && !itinerary.some(it => it.locality_id === localityId)) {
+                // FLIP: capture old positions
+                const oldPositions = {};
+                container.querySelectorAll(".hotspot-card[data-locality-id]").forEach(card => {
+                    oldPositions[card.dataset.localityId] = card.getBoundingClientRect().top;
+                });
+
                 itinerary.push(hotspot);
-                btn.className = "added-itinerary-btn";
-                btn.innerHTML = "&#10003;";
-                btn.title = "Added to itinerary";
+                renderResultsView();
                 updateMap();
+
+                // FLIP: animate to new positions
+                const newContainer = document.getElementById("results-view-container");
+                const cardsToAnimate = [];
+                newContainer.querySelectorAll(".hotspot-card[data-locality-id]").forEach(card => {
+                    const oldTop = oldPositions[card.dataset.localityId];
+                    if (oldTop === undefined) return;
+                    const newTop = card.getBoundingClientRect().top;
+                    const delta = oldTop - newTop;
+                    if (Math.abs(delta) < 1) return;
+                    card.style.transition = "none";
+                    card.style.transform = `translateY(${delta}px)`;
+                    cardsToAnimate.push(card);
+                });
+                // Force reflow so the inverted position is committed
+                if (cardsToAnimate.length) cardsToAnimate[0].offsetHeight;
+                cardsToAnimate.forEach(card => {
+                    card.style.transition = "transform 1s ease";
+                    card.style.transform = "";
+                    card.addEventListener("transitionend", () => {
+                        card.style.transition = "";
+                    }, { once: true });
+                });
             }
         });
     });
@@ -1242,7 +1318,7 @@ function renderPlanView() {
         `).join("");
 
         html += `
-            <div class="section-title" style="margin-top: 1.5rem;">All Potential ${isSearch ? "Targets" : "Lifers"} (Combined Probability)</div>
+            <div class="section-title" style="margin-top: 1.5rem;">All Potential ${isSearch ? "Targets" : "Lifers"}</div>
             <div class="hotspot-card">
                 <div style="padding: 1rem 1.25rem;">
                     <table>
