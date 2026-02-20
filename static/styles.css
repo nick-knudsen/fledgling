@@ -235,6 +235,7 @@ button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
     justify-content: space-between; align-items: center;
 }
 .hotspot-header:hover { background: var(--hover); }
+.drag-active .hotspot-header:hover { background: none; }
 .hotspot-header .rank {
     font-size: 1.1rem; font-weight: 600; color: var(--accent);
     margin-right: 0.75rem;
@@ -371,8 +372,8 @@ td { padding: 0.4rem 0; border-bottom: 1px solid var(--border-light); }
 html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; color: #ef5350; }
 
 /* Drag states */
-.hotspot-card.dragging { opacity: 0.4; }
-.hotspot-card.drag-over { border-top: 2px solid var(--accent); }
+.hotspot-card.dragging { pointer-events: none; }
+.drag-placeholder { margin-bottom: 1rem; }
 
 .empty-state {
     text-align: center; color: var(--text-empty); padding: 4rem 2rem;

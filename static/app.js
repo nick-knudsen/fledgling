@@ -18,6 +18,7 @@ let markers = {}; // rank -> L.marker
 let itinerary = []; // ordered array of hotspot data objects
 let resultsMode = "explore"; // "explore" or "plan"
 let lastResultsData = null;
+let isDragging = false;
 
 applyTheme(getSystemTheme());
 
@@ -1085,7 +1086,7 @@ function renderPlanView() {
         `).join("");
 
         html += `
-            <div class="hotspot-card plan-card" data-rank="${rank}" data-index="${i}" draggable="true">
+            <div class="hotspot-card plan-card" data-rank="${rank}" data-index="${i}">
                 <div class="hotspot-header">
                     <span class="drag-handle" title="Drag to reorder">&#9776;</span>
                     <span class="rank">${rank}</span>
@@ -1138,53 +1139,131 @@ function renderPlanView() {
         });
     });
 
-    // Drag and drop reordering
-    let dragSrcIndex = null;
+    // Pointer-based drag and drop reordering
+    let dragState = null;
 
-    // Track whether drag started from handle
-    let dragFromHandle = false;
     container.querySelectorAll(".drag-handle").forEach(handle => {
-        handle.addEventListener("mousedown", () => { dragFromHandle = true; });
-    });
-    document.addEventListener("mouseup", () => { dragFromHandle = false; }, { once: false });
+        handle.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            const card = handle.closest(".plan-card");
+            const srcIndex = parseInt(card.dataset.index);
+            const rect = card.getBoundingClientRect();
 
-    container.querySelectorAll(".plan-card").forEach(card => {
-        card.addEventListener("dragstart", (e) => {
-            if (!dragFromHandle) {
-                e.preventDefault();
-                return;
-            }
-            dragSrcIndex = parseInt(card.dataset.index);
+            const placeholder = document.createElement("div");
+            placeholder.className = "drag-placeholder";
+            placeholder.style.height = rect.height + "px";
+
             card.classList.add("dragging");
-            e.dataTransfer.effectAllowed = "move";
-        });
+            card.style.position = "fixed";
+            card.style.top = rect.top + "px";
+            card.style.left = rect.left + "px";
+            card.style.width = rect.width + "px";
+            card.style.zIndex = "1000";
 
-        card.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            container.querySelectorAll(".plan-card").forEach(c => c.classList.remove("drag-over"));
-            card.classList.add("drag-over");
-        });
+            card.parentNode.insertBefore(placeholder, card);
 
-        card.addEventListener("drop", (e) => {
-            e.preventDefault();
-            const dropIndex = parseInt(card.dataset.index);
-            if (dragSrcIndex !== null && dragSrcIndex !== dropIndex) {
-                const [moved] = itinerary.splice(dragSrcIndex, 1);
-                itinerary.splice(dropIndex, 0, moved);
-                renderPlanView();
-                updateMapForMode();
-            }
-        });
-
-        card.addEventListener("dragend", () => {
-            dragSrcIndex = null;
-            container.querySelectorAll(".plan-card").forEach(c => {
-                c.classList.remove("dragging");
-                c.classList.remove("drag-over");
-            });
+            isDragging = true;
+            container.classList.add("drag-active");
+            dragState = { srcIndex, card, placeholder, startY: e.clientY, cardTop: rect.top };
+            document.addEventListener("mousemove", onDragMove);
+            document.addEventListener("mouseup", onDragEnd);
         });
     });
+
+    function onDragMove(e) {
+        if (!dragState) return;
+        const { card, placeholder, startY, cardTop } = dragState;
+
+        card.style.top = (cardTop + e.clientY - startY) + "px";
+
+        // Get all siblings that are either non-dragging cards or the placeholder
+        const siblings = [...container.querySelectorAll(".plan-card:not(.dragging), .drag-placeholder")];
+        const placeholderIdx = siblings.indexOf(placeholder);
+
+        // Check if we should move the placeholder up or down
+        let shouldMove = false;
+        let movingCard = null;
+
+        // Move up: if cursor is above the midpoint of the sibling before the placeholder
+        if (placeholderIdx > 0) {
+            const prev = siblings[placeholderIdx - 1];
+            const prevRect = prev.getBoundingClientRect();
+            if (e.clientY < prevRect.top + prevRect.height / 2) {
+                movingCard = prev;
+                shouldMove = true;
+            }
+        }
+        // Move down: if cursor is below the midpoint of the sibling after the placeholder
+        if (!shouldMove && placeholderIdx < siblings.length - 1) {
+            const next = siblings[placeholderIdx + 1];
+            const nextRect = next.getBoundingClientRect();
+            if (e.clientY > nextRect.top + nextRect.height / 2) {
+                movingCard = next;
+                shouldMove = true;
+            }
+        }
+
+        if (shouldMove && movingCard) {
+            // FLIP: record position before move
+            const oldRect = movingCard.getBoundingClientRect();
+
+            // Move placeholder
+            if (siblings.indexOf(movingCard) < placeholderIdx) {
+                movingCard.parentNode.insertBefore(placeholder, movingCard);
+            } else {
+                movingCard.parentNode.insertBefore(placeholder, movingCard.nextSibling);
+            }
+
+            // FLIP: animate from old position to new
+            const newRect = movingCard.getBoundingClientRect();
+            const deltaY = oldRect.top - newRect.top;
+            if (deltaY !== 0) {
+                movingCard.style.transition = "none";
+                movingCard.style.transform = `translateY(${deltaY}px)`;
+                movingCard.offsetHeight; // force reflow
+                movingCard.style.transition = "transform 0.15s ease";
+                movingCard.style.transform = "";
+            }
+        }
+    }
+
+    function onDragEnd() {
+        if (!dragState) return;
+        document.removeEventListener("mousemove", onDragMove);
+        document.removeEventListener("mouseup", onDragEnd);
+
+        const { srcIndex, card, placeholder } = dragState;
+        isDragging = false;
+        container.classList.remove("drag-active");
+
+        // Determine drop index from placeholder position among non-dragging cards
+        const cards = [...container.querySelectorAll(".plan-card:not(.dragging)")];
+        let dropIndex = cards.length; // default: end
+        for (let i = 0; i < cards.length; i++) {
+            if (placeholder.compareDocumentPosition(cards[i]) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                dropIndex = i;
+                break;
+            }
+        }
+        card.classList.remove("dragging");
+        card.style.position = "";
+        card.style.top = "";
+        card.style.left = "";
+        card.style.width = "";
+        card.style.zIndex = "";
+
+        placeholder.parentNode.insertBefore(card, placeholder);
+        placeholder.remove();
+
+        if (srcIndex !== dropIndex) {
+            const [moved] = itinerary.splice(srcIndex, 1);
+            itinerary.splice(dropIndex, 0, moved);
+            renderPlanView();
+            updateMapForMode();
+        }
+
+        dragState = null;
+    }
 
     // Expand/collapse all
     document.getElementById("expand-all-btn").addEventListener("click", () => {
@@ -1196,6 +1275,8 @@ function renderPlanView() {
 }
 
 function highlightHotspot(rank, on) {
+    if (isDragging) return;
+
     // Highlight map marker via DOM query
     const inner = document.querySelector(`.map-marker-inner[data-rank="${rank}"]`);
     if (inner) inner.classList.toggle("highlight", on);

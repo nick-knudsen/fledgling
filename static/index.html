@@ -126,5 +126,24 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/app.js"></script>
+
+    <!-- Dev-only: live CSS reload (remove for production) -->
+    <script>
+    (function() {
+        const link = document.querySelector('link[href="/styles.css"]');
+        if (!link) return;
+        let lastModified = '';
+        setInterval(async () => {
+            try {
+                const res = await fetch('/styles.css', { method: 'HEAD', cache: 'no-cache' });
+                const mod = res.headers.get('last-modified') || res.headers.get('etag') || '';
+                if (lastModified && mod !== lastModified) {
+                    link.href = '/styles.css?t=' + Date.now();
+                }
+                lastModified = mod;
+            } catch {}
+        }, 500);
+    })();
+    </script>
 </body>
 </html>
