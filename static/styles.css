@@ -50,7 +50,7 @@ html[data-theme="dark"] .logo-light { display: none; }
 html[data-theme="dark"] .logo-dark { display: inline; }
 
 .theme-switch {
-    position: fixed; bottom: 1rem; left: 1rem; z-index: 1000;
+    position: relative;
     width: 44px; height: 24px;
     background: #1a1a1a; border: 1px solid var(--border); border-radius: 12px;
     cursor: pointer; user-select: none;
@@ -62,6 +62,16 @@ html[data-theme="dark"] .theme-switch { background: #f8f8f8; }
     background: var(--accent); transition: left 0.2s ease;
 }
 html[data-theme="dark"] .theme-switch-knob { left: 23px; }
+
+.sidebar-footer {
+    padding-top: 1rem; border-top: 1px solid var(--border);
+    font-size: 0.7rem; line-height: 1.4; color: var(--text-secondary);
+}
+.sidebar-footer a { color: var(--accent); text-decoration: none; }
+.sidebar-footer a:hover { text-decoration: underline; }
+.sidebar-footer .citation {
+    margin-top: 0.4rem; font-style: italic; color: var(--text-muted); font-size: 0.65rem;
+}
 
 .layout { display: flex; height: 100vh; }
 
@@ -454,6 +464,93 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
 }
 .expand-collapse-btn:hover { background: var(--hover); border-color: var(--accent); }
 
+/* Walkthrough */
+.walkthrough-overlay {
+    display: none; position: fixed; inset: 0; z-index: 2500;
+}
+.walkthrough-overlay.open { display: block; }
+.walkthrough-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    transition: clip-path 0.3s ease;
+}
+.walkthrough-bubble {
+    position: fixed; z-index: 2501;
+    background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.25rem; max-width: 320px; width: 90%;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+    transition: top 0.3s ease, left 0.3s ease;
+}
+.walkthrough-bubble::after {
+    content: ''; position: absolute;
+    width: 10px; height: 10px; background: var(--bg-surface);
+    border: 1px solid var(--border); transform: rotate(45deg);
+}
+.walkthrough-bubble[data-arrow="top"]::after {
+    top: -6px; left: 50%; margin-left: -5px;
+    border-right: none; border-bottom: none;
+}
+.walkthrough-bubble[data-arrow="bottom"]::after {
+    bottom: -6px; left: 50%; margin-left: -5px;
+    border-left: none; border-top: none;
+}
+.walkthrough-bubble[data-arrow="left"]::after {
+    left: -6px; top: 50%; margin-top: -5px;
+    border-right: none; border-top: none;
+}
+.walkthrough-bubble[data-arrow="right"]::after {
+    right: -6px; top: 50%; margin-top: -5px;
+    border-left: none; border-bottom: none;
+}
+.walkthrough-title {
+    font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 0.4rem;
+}
+.walkthrough-desc {
+    font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 1rem;
+}
+.walkthrough-footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+}
+.walkthrough-dots {
+    display: flex; gap: 5px;
+}
+.walkthrough-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--border); transition: background 0.2s;
+}
+.walkthrough-dot.active { background: var(--accent); }
+.walkthrough-btns {
+    display: flex; gap: 0.4rem;
+}
+.walkthrough-btn {
+    padding: 0.35rem 1rem; border: none; border-radius: 6px;
+    font-size: 0.8rem; font-weight: 500; cursor: pointer;
+}
+.walkthrough-btn.primary { background: var(--accent); color: #fff; }
+.walkthrough-btn.primary:hover { background: var(--accent-hover); }
+.walkthrough-btn.secondary { background: none; color: var(--text-secondary); border: 1px solid var(--border); }
+.walkthrough-btn.secondary:hover { border-color: var(--accent); color: var(--accent); }
+.walkthrough-btn.skip { background: none; color: var(--text-secondary); border: none; font-size: 0.75rem; }
+.walkthrough-btn.skip:hover { color: var(--text); }
+.walkthrough-target-highlight {
+    position: relative; z-index: 2501;
+    box-shadow: 0 0 0 4px var(--accent), 0 0 0 6px rgba(26,115,232,0.2);
+    border-radius: 6px;
+}
+.tour-help-btn {
+    display: flex; align-items: center; gap: 0.35rem;
+    background: none; border: 1px solid var(--text-secondary); border-radius: 12px;
+    color: var(--text-secondary); font-size: 0.75rem; font-weight: 500;
+    cursor: pointer; padding: 0.2rem 0.6rem 0.2rem 0.35rem;
+    font-family: system-ui, -apple-system, sans-serif;
+}
+.tour-help-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tour-help-btn .tour-help-icon {
+    width: 16px; height: 16px; border-radius: 50%; border: 1px solid currentColor;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 600; line-height: 1; flex-shrink: 0;
+}
+
 /* Wide screen: map on right, hotspot list on left */
 @media (min-width: 1400px) {
     .layout { height: 100vh; }
@@ -467,5 +564,5 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
         order: 0; width: 45%; min-width: 400px; flex-shrink: 0;
         position: sticky; top: 0; align-self: flex-start;
     }
-    .results-map #map { height: calc(100vh - 12rem); margin-bottom: 0; }
+    .results-map #map { height: calc(100vh - 3rem); margin-bottom: 0; }
 }

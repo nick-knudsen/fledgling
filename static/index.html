@@ -10,10 +10,6 @@
     <script>document.documentElement.setAttribute("data-theme", window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");</script>
 </head>
 <body>
-    <div class="theme-switch" id="theme-toggle" title="Toggle dark mode">
-        <span class="theme-switch-knob"></span>
-    </div>
-
     <div class="layout">
         <aside class="sidebar">
             <div class="sidebar-logo">
@@ -119,11 +115,24 @@
             </div>
 
             <div class="form-group">
-                <label>Number of Hotspots</label>
+                <label>Number of Results</label>
                 <input type="number" id="k-input" value="5" min="1" max="20" />
             </div>
 
             <button class="primary" id="optimize-btn" disabled>Find Hotspots</button>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: auto;">
+                <div class="theme-switch" id="theme-toggle" title="Toggle dark mode">
+                    <span class="theme-switch-knob"></span>
+                </div>
+                <button type="button" class="tour-help-btn" id="tour-help-btn"><span class="tour-help-icon">?</span> Help</button>
+            </div>
+
+            <div class="sidebar-footer">
+                <p>&copy; 2026 Nicholas Knudsen</p>
+                <p>Bird observation data provided by <a href="https://ebird.org" target="_blank" rel="noopener noreferrer">eBird</a> (<a href="https://ebird.org/science/use-ebird-data/download-ebird-data-products" target="_blank" rel="noopener noreferrer">eBird Basic Dataset</a>) and is made available for non-commercial use by the <a href="https://www.birds.cornell.edu" target="_blank" rel="noopener noreferrer">Cornell Lab of Ornithology</a>.</p>
+                <p class="citation">eBird Basic Dataset. Version: EBD_relJan-2026. Cornell Lab of Ornithology, Ithaca, New York. Jan 2026.</p>
+            </div>
         </aside>
 
         <main class="main" id="results">
@@ -131,6 +140,36 @@
                 <p>Select your search parameters to get started.</p>
             </div>
         </main>
+    </div>
+
+    <div class="help-dialog-overlay" id="walkthrough-welcome-overlay">
+        <div class="help-dialog" style="max-width: 400px;">
+            <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem;">Welcome to fledgling!</p>
+            <p style="text-align: left;">fledgling uses eBird data to help you:</p>
+            <ul style="text-align: left; font-size: 0.9rem; color: var(--text); line-height: 1.5; margin: 0 0 1rem 1.25rem; padding: 0;">
+                <li>Find hotspots with the highest detection probability for your target species</li>
+                <li>Build and reorder a custom birding itinerary</li>
+                <li>Explore results on an interactive map</li>
+            </ul>
+            <p style="text-align: left;">It is perfect for planning birding trips in your backyard or anywhere else you might want to explore, whether you're doing a big year or just looking for that one nemesis!</p>
+
+            <div style="display: flex; gap: 0.5rem; justify-content: center;">
+                <button type="button" class="help-dialog-close" id="walkthrough-welcome-skip" style="background: var(--border); color: var(--text);">Start planning</button>
+                <button type="button" class="help-dialog-close" id="walkthrough-welcome-start">Take a tour</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="walkthrough-overlay" id="walkthrough-overlay">
+        <div class="walkthrough-backdrop" id="walkthrough-backdrop"></div>
+        <div class="walkthrough-bubble" id="walkthrough-bubble">
+            <div class="walkthrough-title" id="walkthrough-title"></div>
+            <div class="walkthrough-desc" id="walkthrough-desc"></div>
+            <div class="walkthrough-footer">
+                <div class="walkthrough-dots" id="walkthrough-dots"></div>
+                <div class="walkthrough-btns" id="walkthrough-btns"></div>
+            </div>
+        </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

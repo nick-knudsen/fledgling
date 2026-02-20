@@ -1870,3 +1870,398 @@ speciesInput.addEventListener("focus", () => {
         renderSpeciesDropdown(matches);
     }
 });
+
+// ── Walkthrough ──────────────────────────────────────────────────────
+(function() {
+    const STORAGE_KEY = "walkthrough-completed";
+    const FIRST_RESULTS_STEP = 5;
+
+    const MOCK_DATA = {
+        num_candidate_hotspots: 47,
+        num_potential_lifers: 12,
+        hotspots: [
+            {
+                locality_id: 191106, locality: "Central Park", latitude: 40.7829, longitude: -73.9654,
+                county: "New York County",
+                target_species: [
+                    { common_name: "Blackburnian Warbler", probability: 0.42, recently_observed: true },
+                    { common_name: "Scarlet Tanager", probability: 0.38, recently_observed: true },
+                    { common_name: "Rose-breasted Grosbeak", probability: 0.25, recently_observed: false },
+                ]
+            },
+            {
+                locality_id: 165143, locality: "Jamaica Bay Wildlife Refuge", latitude: 40.6171, longitude: -73.8255,
+                county: "Queens County",
+                target_species: [
+                    { common_name: "American Oystercatcher", probability: 0.55, recently_observed: true },
+                    { common_name: "Seaside Sparrow", probability: 0.31, recently_observed: true },
+                    { common_name: "Clapper Rail", probability: 0.22, recently_observed: false },
+                    { common_name: "Ivory-billed Woodpecker", probability: 0, recently_observed: false },
+                ]
+            },
+            {
+                locality_id: 109516, locality: "Prospect Park", latitude: 40.6602, longitude: -73.9690,
+                county: "Kings County",
+                target_species: [
+                    { common_name: "Wood Thrush", probability: 0.35, recently_observed: true },
+                    { common_name: "Eastern Towhee", probability: 0.28, recently_observed: true },
+                ]
+            },
+        ]
+    };
+
+    const steps = [
+        {
+            selector: ".form-group:has(.target-mode-btn)",
+            title: "Choose Your Targets",
+            desc: "Search for a specific species...",
+            prefer: "right",
+            onEnter: "switchToSearch"
+        },
+        {
+            selector: ".form-group:has(.target-mode-btn)",
+            title: "Choose Your Targets",
+            desc: "...or upload your eBird data to find birds you haven't seen yet.",
+            prefer: "right",
+            onEnter: "switchToLifelist"
+        },
+        {
+            selector: ".form-group:has(.search-mode-btn)",
+            title: "Set Your Search Area",
+            desc: "Search by geographic region or by driving time from a location.",
+            prefer: "right"
+        },
+        {
+            selector: ".date-row",
+            title: "Pick a Date Range",
+            desc: "Narrow results to a specific window. Detection probabilities are calculated from eBird checklists in this period.",
+            prefer: "right"
+        },
+        {
+            selector: "#optimize-btn",
+            title: "Find Hotspots",
+            desc: "Run the optimizer to find the best birding hotspots for your targets, area, and dates.",
+            prefer: "right"
+        },
+        {
+            selector: ".results-mode-toggle",
+            title: "Explore & Plan",
+            desc: "Switch between Explore mode to browse recommended hotspots, and Plan mode to build a custom itinerary.",
+            prefer: "bottom"
+        },
+        {
+            selector: ".hotspot-card",
+            title: "Hotspot Cards",
+            desc: "Each card shows a hotspot's expected target species and detection probabilities. Click to expand and see details.",
+            prefer: "left",
+            onEnter: "switchToExplore"
+        },
+        {
+            selector: ".add-itinerary-btn",
+            title: "Build Your Itinerary",
+            desc: "Click the + button to add a hotspot to your trip itinerary.",
+            prefer: "left",
+            onEnter: "switchToExplore"
+        },
+        {
+            selector: ".plan-card",
+            title: "Your Itinerary",
+            desc: "Drag and drop cards to reorder your stops. The marginal gain updates based on visit order.",
+            prefer: "left",
+            onEnter: "switchToPlan"
+        },
+        {
+            selector: ".remove-itinerary-btn",
+            title: "Remove a Stop",
+            desc: "Click the X button to remove a hotspot from your itinerary.",
+            prefer: "left"
+        },
+        {
+            selector: "#map",
+            title: "Interactive Map",
+            desc: "Hotspots appear on the map with ranked markers. Click a marker to jump to that hotspot's card.",
+            prefer: "left"
+        },
+        {
+            selector: "#theme-toggle",
+            title: "Dark Mode",
+            desc: "Toggle between light and dark themes.",
+            prefer: "right"
+        },
+    ];
+
+    let currentStep = 0;
+    let currentHighlight = null;
+    let mockResultsActive = false;
+
+    const overlay = document.getElementById("walkthrough-overlay");
+    const backdrop = document.getElementById("walkthrough-backdrop");
+    const bubble = document.getElementById("walkthrough-bubble");
+    const titleEl = document.getElementById("walkthrough-title");
+    const descEl = document.getElementById("walkthrough-desc");
+    const dotsEl = document.getElementById("walkthrough-dots");
+    const btnsEl = document.getElementById("walkthrough-btns");
+
+    function startWalkthrough() {
+        currentStep = 0;
+        overlay.classList.add("open");
+        showStep();
+    }
+
+    function cleanupMockResults() {
+        if (!mockResultsActive) return;
+        mockResultsActive = false;
+        lastResultsData = null;
+        itinerary = [];
+        resultsMode = "explore";
+        if (map) { map.remove(); map = null; }
+        markers = {};
+        clearRoute();
+        document.getElementById("results").innerHTML =
+            '<div class="empty-state"><p>Select your search parameters to get started.</p></div>';
+    }
+
+    function endWalkthrough() {
+        overlay.classList.remove("open");
+        if (currentHighlight) {
+            currentHighlight.classList.remove("walkthrough-target-highlight");
+            currentHighlight = null;
+        }
+        cleanupMockResults();
+        // Reset target mode back to search
+        targetMode = "search";
+        document.querySelectorAll(".target-mode-btn").forEach(b => {
+            b.classList.toggle("active", b.dataset.mode === "search");
+        });
+        document.getElementById("target-search-inputs").style.display = "";
+        document.getElementById("target-lifelist-inputs").style.display = "none";
+        updateOptimizeBtn();
+        localStorage.setItem(STORAGE_KEY, "true");
+    }
+
+    function ensureMockResults() {
+        if (mockResultsActive) return;
+        // Only inject if there are no real results
+        if (lastResultsData) return;
+        mockResultsActive = true;
+        renderResults(MOCK_DATA);
+        // Disable exclude & recalculate links during tour
+        document.querySelectorAll(".exclude-btn").forEach(btn => {
+            btn.style.pointerEvents = "none";
+            btn.style.opacity = "0.4";
+        });
+    }
+
+    function showStep() {
+        const step = steps[currentStep];
+
+        // Remove previous highlight
+        if (currentHighlight) {
+            currentHighlight.classList.remove("walkthrough-target-highlight");
+        }
+
+        // Inject mock results when we reach the results steps
+        if (currentStep >= FIRST_RESULTS_STEP) {
+            ensureMockResults();
+        } else if (mockResultsActive) {
+            cleanupMockResults();
+        }
+
+        // Run step actions
+        if (step.onEnter === "switchToSearch") {
+            targetMode = "search";
+            document.querySelectorAll(".target-mode-btn").forEach(b => {
+                b.classList.toggle("active", b.dataset.mode === "search");
+            });
+            document.getElementById("target-search-inputs").style.display = "";
+            document.getElementById("target-lifelist-inputs").style.display = "none";
+        } else if (step.onEnter === "switchToLifelist") {
+            targetMode = "lifelist";
+            document.querySelectorAll(".target-mode-btn").forEach(b => {
+                b.classList.toggle("active", b.dataset.mode === "lifelist");
+            });
+            document.getElementById("target-search-inputs").style.display = "none";
+            document.getElementById("target-lifelist-inputs").style.display = "";
+        } else if (step.onEnter === "switchToExplore" && mockResultsActive) {
+            if (resultsMode !== "explore") {
+                resultsMode = "explore";
+                document.querySelectorAll(".results-mode-btn").forEach(b => {
+                    b.classList.toggle("active", b.dataset.mode === "explore");
+                });
+                renderResultsView();
+                // Re-disable exclude buttons
+                document.querySelectorAll(".exclude-btn").forEach(btn => {
+                    btn.style.pointerEvents = "none";
+                    btn.style.opacity = "0.4";
+                });
+            }
+        } else if (step.onEnter === "switchToPlan" && mockResultsActive) {
+            // Ensure hotspots in itinerary for the plan view
+            MOCK_DATA.hotspots.slice(0, 2).forEach(h => {
+                if (!itinerary.some(it => it.locality_id === h.locality_id)) {
+                    itinerary.push(h);
+                }
+            });
+            resultsMode = "plan";
+            document.querySelectorAll(".results-mode-btn").forEach(b => {
+                b.classList.toggle("active", b.dataset.mode === "plan");
+            });
+            renderResultsView();
+        }
+
+        const target = document.querySelector(step.selector);
+
+        if (!target) {
+            // Skip missing elements
+            if (currentStep < steps.length - 1) { currentStep++; showStep(); }
+            else endWalkthrough();
+            return;
+        }
+
+        // Scroll target into view
+        target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+        // Small delay for scroll to settle
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            // Highlight target
+            target.classList.add("walkthrough-target-highlight");
+            currentHighlight = target;
+
+            // Cut out the target from the backdrop
+            const rect = target.getBoundingClientRect();
+            const pad = 8;
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const rx = rect.width / 2 + pad;
+            const ry = rect.height / 2 + pad;
+            backdrop.style.clipPath = `polygon(
+                0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
+                ${cx - rx}px ${cy - ry}px,
+                ${cx - rx}px ${cy + ry}px,
+                ${cx + rx}px ${cy + ry}px,
+                ${cx + rx}px ${cy - ry}px,
+                ${cx - rx}px ${cy - ry}px
+            )`;
+
+            // Position bubble
+            positionBubble(rect, step.prefer);
+
+            // Content
+            titleEl.textContent = step.title;
+            descEl.textContent = step.desc;
+
+            // Dots
+            dotsEl.innerHTML = steps.map((_, i) =>
+                `<div class="walkthrough-dot${i === currentStep ? " active" : ""}"></div>`
+            ).join("");
+
+            // Buttons
+            let btns = "";
+            if (currentStep === 0) {
+                btns += `<button class="walkthrough-btn skip" id="wt-skip">Skip</button>`;
+                btns += `<button class="walkthrough-btn primary" id="wt-next">Next</button>`;
+            } else if (currentStep === steps.length - 1) {
+                btns += `<button class="walkthrough-btn secondary" id="wt-prev">Back</button>`;
+                btns += `<button class="walkthrough-btn primary" id="wt-done">Done</button>`;
+            } else {
+                btns += `<button class="walkthrough-btn secondary" id="wt-prev">Back</button>`;
+                btns += `<button class="walkthrough-btn primary" id="wt-next">Next</button>`;
+            }
+            btnsEl.innerHTML = btns;
+
+            // Wire buttons
+            const skipBtn = document.getElementById("wt-skip");
+            const nextBtn = document.getElementById("wt-next");
+            const prevBtn = document.getElementById("wt-prev");
+            const doneBtn = document.getElementById("wt-done");
+            if (skipBtn) skipBtn.addEventListener("click", endWalkthrough);
+            if (nextBtn) nextBtn.addEventListener("click", () => { currentStep++; showStep(); });
+            if (prevBtn) prevBtn.addEventListener("click", () => { currentStep--; showStep(); });
+            if (doneBtn) doneBtn.addEventListener("click", endWalkthrough);
+        }));
+    }
+
+    function positionBubble(targetRect, prefer) {
+        const gap = 14;
+        const bw = 320;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+
+        // Reset
+        bubble.style.maxWidth = bw + "px";
+
+        // Measure bubble height (render offscreen briefly)
+        bubble.style.visibility = "hidden";
+        bubble.style.top = "0px";
+        bubble.style.left = "0px";
+        document.body.offsetHeight;
+        const bh = bubble.offsetHeight;
+        bubble.style.visibility = "";
+
+        let top, left, arrow;
+
+        if (prefer === "right" && targetRect.right + gap + bw < vw) {
+            top = targetRect.top + targetRect.height / 2 - bh / 2;
+            left = targetRect.right + gap;
+            arrow = "left";
+        } else if (prefer === "left" && targetRect.left - gap - bw > 0) {
+            top = targetRect.top + targetRect.height / 2 - bh / 2;
+            left = targetRect.left - gap - bw;
+            arrow = "right";
+        } else if (prefer === "bottom" && targetRect.bottom + gap + bh < vh) {
+            top = targetRect.bottom + gap;
+            left = targetRect.left + targetRect.width / 2 - bw / 2;
+            arrow = "top";
+        } else if (targetRect.top - gap - bh > 0) {
+            top = targetRect.top - gap - bh;
+            left = targetRect.left + targetRect.width / 2 - bw / 2;
+            arrow = "bottom";
+        } else {
+            top = targetRect.bottom + gap;
+            left = targetRect.left + targetRect.width / 2 - bw / 2;
+            arrow = "top";
+        }
+
+        // Clamp to viewport
+        top = Math.max(8, Math.min(top, vh - bh - 8));
+        left = Math.max(8, Math.min(left, vw - bw - 8));
+
+        bubble.style.top = top + "px";
+        bubble.style.left = left + "px";
+        bubble.setAttribute("data-arrow", arrow);
+    }
+
+    // Click backdrop to dismiss
+    backdrop.addEventListener("click", endWalkthrough);
+
+    // Welcome dialog
+    const welcomeOverlay = document.getElementById("walkthrough-welcome-overlay");
+    const welcomeSkip = document.getElementById("walkthrough-welcome-skip");
+    const welcomeStart = document.getElementById("walkthrough-welcome-start");
+
+    function showWelcome() {
+        welcomeOverlay.classList.add("open");
+    }
+
+    function dismissWelcome() {
+        welcomeOverlay.classList.remove("open");
+        localStorage.setItem(STORAGE_KEY, "true");
+    }
+
+    welcomeSkip.addEventListener("click", dismissWelcome);
+    welcomeStart.addEventListener("click", () => {
+        welcomeOverlay.classList.remove("open");
+        startWalkthrough();
+    });
+    welcomeOverlay.addEventListener("click", (e) => {
+        if (e.target === e.currentTarget) dismissWelcome();
+    });
+
+    // Help button — shows welcome dialog
+    document.getElementById("tour-help-btn").addEventListener("click", showWelcome);
+
+    // Auto-start on first visit — show welcome dialog
+    if (!localStorage.getItem(STORAGE_KEY)) {
+        setTimeout(showWelcome, 500);
+    }
+})();
