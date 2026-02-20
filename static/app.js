@@ -171,10 +171,12 @@ function getVisibleCounties() {
         if (!searchAreas[c]) continue;
         for (const [st, cts] of Object.entries(searchAreas[c])) {
             if (states && !states.includes(st)) continue;
-            counties.push(...cts);
+            for (const county of cts) {
+                counties.push(`${st}|${county}`);
+            }
         }
     }
-    return counties.sort();
+    return counties.sort((a, b) => a.split("|")[1].localeCompare(b.split("|")[1]));
 }
 
 function refreshStateDropdown() {
@@ -190,6 +192,12 @@ function refreshCountyDropdown() {
 }
 
 let multiSelectActive = {}; // id -> boolean
+
+function countyDisplayName(val, allItems) {
+    const [state, county] = val.split("|");
+    const dupes = allItems.filter(v => v.split("|")[1] === county);
+    return dupes.length > 1 ? `${county} (${regionName(state)})` : county;
+}
 
 function populateMultiSelect(id, items, selectedSet, onChange) {
     if (!Array.isArray(items)) items = [];
@@ -243,7 +251,8 @@ function populateMultiSelect(id, items, selectedSet, onChange) {
         item.className = "multi-select-item";
         if (selectedSet.has(val)) item.classList.add("selected");
         item.dataset.value = val;
-        item.innerHTML = `<span>${val}</span><span class="check">✓</span>`;
+        const label = id === "county" ? countyDisplayName(val, items) : val;
+        item.innerHTML = `<span>${label}</span><span class="check">✓</span>`;
         item.addEventListener("click", (e) => {
             e.stopPropagation();
             if (multiSelectActive[id]) {
@@ -272,6 +281,8 @@ function updateMultiSelectDisplay(id, selectedSet, defaultText) {
     const display = document.getElementById(`${id}-display`);
     if (selectedSet.size === 0) {
         display.textContent = defaultText;
+    } else if (id === "county") {
+        display.textContent = Array.from(selectedSet).map(v => v.split("|")[1]).join(", ");
     } else {
         display.textContent = Array.from(selectedSet).join(", ");
     }
@@ -741,9 +752,17 @@ async function runOptimization() {
         const counties = Array.from(selectedCounties);
         const states = Array.from(selectedStates);
         const countries = Array.from(selectedCountries);
-        body.counties = counties.length > 0 ? counties : null;
-        body.states = counties.length === 0 && states.length > 0 ? states : null;
-        body.country = counties.length === 0 && states.length === 0 && countries.length === 1 ? countries[0] : null;
+        if (counties.length > 0) {
+            // Send state|county pairs for unambiguous filtering
+            body.state_counties = counties.map(v => {
+                const [state, county] = v.split("|");
+                return { state, county };
+            });
+        } else if (states.length > 0) {
+            body.states = states;
+        } else if (countries.length === 1) {
+            body.country = countries[0];
+        }
     }
 
     if (excludedLocalityIds.length > 0) {
