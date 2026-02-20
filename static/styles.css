@@ -63,7 +63,7 @@ html[data-theme="dark"] .theme-switch { background: #f8f8f8; }
 }
 html[data-theme="dark"] .theme-switch-knob { left: 23px; }
 
-.layout { display: flex; min-height: 100vh; }
+.layout { display: flex; height: 100vh; }
 
 .sidebar {
     width: 340px; min-width: 340px; background: var(--bg-surface);
@@ -181,7 +181,7 @@ button.primary {
 button.primary:hover { background: var(--accent-hover); }
 button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
 
-.main { flex: 1; padding: 1.5rem 2rem; overflow-y: auto; }
+.main { flex: 1; padding: 0 2rem 1.5rem; overflow-y: auto; scroll-padding-top: calc(350px + 1.5rem); }
 
 .metrics { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
 .metric-card {
@@ -193,8 +193,9 @@ button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
 
 /* Results layout */
 .results-layout { display: flex; flex-direction: column; }
-.results-map { order: -1; }
-#map { height: 350px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1.5rem; }
+.results-map { order: -1; position: sticky; top: 0; z-index: 2; background: var(--bg); padding-top: 1.5rem; }
+#map { height: 350px; border-radius: 8px; border: 1px solid var(--border); }
+.results-list { padding-top: 1.5rem; }
 .map-marker { background: none; border: none; }
 .map-marker-inner {
     width: 28px; height: 28px; border-radius: 50%;
@@ -345,7 +346,7 @@ td { padding: 0.4rem 0; border-bottom: 1px solid var(--border-light); }
 /* Add to itinerary button */
 .add-itinerary-btn, .added-itinerary-btn {
     width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--input-border);
-    font-size: 1.1rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; line-height: 1; display: flex; align-items: center; justify-content: center; padding-bottom: 2px;
     margin-left: 0.75rem; flex-shrink: 0; transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .add-itinerary-btn {
@@ -400,7 +401,7 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
 @media (min-width: 1400px) {
     .layout { height: 100vh; }
     .sidebar { overflow-y: auto; }
-    .main { overflow-y: auto; }
+    .main { overflow-y: auto; scroll-padding-top: 0; }
     .results-layout {
         flex-direction: row; gap: 1.5rem;
     }
