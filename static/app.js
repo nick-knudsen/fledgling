@@ -1319,7 +1319,10 @@ function toggleHotspotBody(localityId, scroll) {
     const card = document.querySelector(`.hotspot-card[data-locality-id="${localityId}"]`);
     if (!card) return;
     const body = card.querySelector(".hotspot-body");
-    if (body) body.classList.toggle("open");
+    if (body) {
+        if (scroll) body.classList.add("open");
+        else body.classList.toggle("open");
+    }
 
     if (scroll) {
         card.scrollIntoView({ behavior: "smooth", block: "start" });
