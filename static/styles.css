@@ -204,6 +204,9 @@ button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
     transition: transform 0.15s ease;
 }
+.map-marker-inner.itinerary-marker {
+    background: var(--success);
+}
 .map-marker-inner.highlight {
     transform: scale(1.2);
 }

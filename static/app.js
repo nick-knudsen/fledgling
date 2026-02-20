@@ -846,7 +846,6 @@ function renderResults(data) {
             btn.classList.add("active");
             resultsMode = btn.dataset.mode;
             renderResultsView();
-            updateMapForMode();
         });
     });
 
@@ -858,34 +857,37 @@ function renderResults(data) {
     const tiles = tileSets[theme];
     tileLayer = L.tileLayer(tiles.url, { attribution: tiles.attribution }).addTo(map);
 
-    updateMapForMode();
+    updateMap();
     renderResultsView();
 }
 
-function updateMapForMode() {
+function updateMap() {
     if (!map || !lastResultsData) return;
 
     // Clear existing markers
     Object.values(markers).forEach(m => m.remove());
     markers = {};
 
-    const hotspots = resultsMode === "plan" ? itinerary : lastResultsData.hotspots;
     const bounds = [];
 
-    hotspots.forEach((h, i) => {
-        const num = resultsMode === "plan" ? i + 1 : String.fromCharCode(64 + h.rank);
+    lastResultsData.hotspots.forEach(h => {
+        const itineraryIdx = itinerary.findIndex(it => it.locality_id === h.locality_id);
+        const inItinerary = itineraryIdx !== -1;
+        const label = inItinerary ? String(itineraryIdx + 1) : String.fromCharCode(64 + h.rank);
+        const markerClass = inItinerary ? "map-marker-inner itinerary-marker" : "map-marker-inner";
+
         const icon = L.divIcon({
             className: "map-marker",
-            html: `<div class="map-marker-inner" data-rank="${num}">${num}</div>`,
+            html: `<div class="${markerClass}" data-locality-id="${h.locality_id}">${label}</div>`,
             iconSize: [28, 28],
             iconAnchor: [14, 14],
         });
         const marker = L.marker([h.latitude, h.longitude], { icon }).addTo(map);
-        markers[num] = marker;
+        markers[h.locality_id] = marker;
 
-        marker.on("mouseover", () => highlightHotspot(num, true));
-        marker.on("mouseout", () => highlightHotspot(num, false));
-        marker.on("click", () => toggleHotspotBody(num, true));
+        marker.on("mouseover", () => highlightHotspot(h.locality_id, true));
+        marker.on("mouseout", () => highlightHotspot(h.locality_id, false));
+        marker.on("click", () => toggleHotspotBody(h.locality_id, true));
 
         bounds.push([h.latitude, h.longitude]);
     });
@@ -951,7 +953,7 @@ function renderExploreView() {
         `).join("");
 
         html += `
-            <div class="hotspot-card" data-rank="${letter}">
+            <div class="hotspot-card" data-locality-id="${h.locality_id}">
                 <div class="hotspot-header">
                     <span class="rank">${letter}</span>
                     <span class="name">${h.locality}</span>
@@ -1008,16 +1010,16 @@ function renderExploreView() {
     container.innerHTML = html;
 
     // Wire up hotspot card hover and click
-    container.querySelectorAll(".hotspot-card[data-rank]").forEach(card => {
-        const rank = card.dataset.rank;
+    container.querySelectorAll(".hotspot-card[data-locality-id]").forEach(card => {
+        const locId = card.dataset.localityId;
         const header = card.querySelector(".hotspot-header");
 
         header.addEventListener("click", (e) => {
             if (e.target.closest(".add-itinerary-btn") || e.target.closest(".added-itinerary-btn")) return;
-            toggleHotspotBody(rank);
+            toggleHotspotBody(locId);
         });
-        card.addEventListener("mouseenter", () => highlightHotspot(rank, true));
-        card.addEventListener("mouseleave", () => highlightHotspot(rank, false));
+        card.addEventListener("mouseenter", () => highlightHotspot(locId, true));
+        card.addEventListener("mouseleave", () => highlightHotspot(locId, false));
     });
 
     // Wire up add-to-itinerary buttons
@@ -1031,6 +1033,7 @@ function renderExploreView() {
                 btn.className = "added-itinerary-btn";
                 btn.innerHTML = "&#10003;";
                 btn.title = "Added to itinerary";
+                updateMap();
             }
         });
     });
@@ -1046,10 +1049,10 @@ function renderExploreView() {
     });
 
     document.getElementById("expand-all-btn").addEventListener("click", () => {
-        container.querySelectorAll(".hotspot-card[data-rank] .hotspot-body").forEach(b => b.classList.add("open"));
+        container.querySelectorAll(".hotspot-card[data-locality-id] .hotspot-body").forEach(b => b.classList.add("open"));
     });
     document.getElementById("collapse-all-btn").addEventListener("click", () => {
-        container.querySelectorAll(".hotspot-card[data-rank] .hotspot-body").forEach(b => b.classList.remove("open"));
+        container.querySelectorAll(".hotspot-card[data-locality-id] .hotspot-body").forEach(b => b.classList.remove("open"));
     });
 }
 
@@ -1087,7 +1090,7 @@ function renderPlanView() {
         `).join("");
 
         html += `
-            <div class="hotspot-card plan-card" data-rank="${rank}" data-index="${i}">
+            <div class="hotspot-card plan-card" data-locality-id="${h.locality_id}" data-index="${i}">
                 <div class="hotspot-header">
                     <span class="drag-handle" title="Drag to reorder">&#9776;</span>
                     <span class="rank">${rank}</span>
@@ -1118,15 +1121,15 @@ function renderPlanView() {
 
     // Wire up card interactions
     container.querySelectorAll(".plan-card").forEach(card => {
-        const rank = parseInt(card.dataset.rank);
+        const locId = card.dataset.localityId;
         const header = card.querySelector(".hotspot-header");
 
         header.addEventListener("click", (e) => {
             if (e.target.closest(".drag-handle") || e.target.closest(".remove-itinerary-btn")) return;
-            toggleHotspotBody(rank);
+            toggleHotspotBody(locId);
         });
-        card.addEventListener("mouseenter", () => highlightHotspot(rank, true));
-        card.addEventListener("mouseleave", () => highlightHotspot(rank, false));
+        card.addEventListener("mouseenter", () => highlightHotspot(locId, true));
+        card.addEventListener("mouseleave", () => highlightHotspot(locId, false));
     });
 
     // Wire up remove buttons
@@ -1136,7 +1139,7 @@ function renderPlanView() {
             const idx = parseInt(btn.dataset.index);
             itinerary.splice(idx, 1);
             renderPlanView();
-            updateMapForMode();
+            updateMap();
         });
     });
 
@@ -1260,7 +1263,7 @@ function renderPlanView() {
             const [moved] = itinerary.splice(srcIndex, 1);
             itinerary.splice(dropIndex, 0, moved);
             renderPlanView();
-            updateMapForMode();
+            updateMap();
         }
 
         dragState = null;
@@ -1275,20 +1278,20 @@ function renderPlanView() {
     });
 }
 
-function highlightHotspot(rank, on) {
+function highlightHotspot(localityId, on) {
     if (isDragging) return;
 
     // Highlight map marker via DOM query
-    const inner = document.querySelector(`.map-marker-inner[data-rank="${rank}"]`);
+    const inner = document.querySelector(`.map-marker-inner[data-locality-id="${localityId}"]`);
     if (inner) inner.classList.toggle("highlight", on);
 
     // Highlight hotspot card
-    const card = document.querySelector(`.hotspot-card[data-rank="${rank}"]`);
+    const card = document.querySelector(`.hotspot-card[data-locality-id="${localityId}"]`);
     if (card) card.classList.toggle("highlight", on);
 }
 
-function toggleHotspotBody(rank, scroll) {
-    const card = document.querySelector(`.hotspot-card[data-rank="${rank}"]`);
+function toggleHotspotBody(localityId, scroll) {
+    const card = document.querySelector(`.hotspot-card[data-locality-id="${localityId}"]`);
     if (!card) return;
     const body = card.querySelector(".hotspot-body");
     if (body) body.classList.toggle("open");
