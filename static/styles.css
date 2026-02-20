@@ -42,9 +42,9 @@ html[data-theme="dark"] {
 body { font-family: system-ui, -apple-system, sans-serif; color: var(--text); background: var(--bg); }
 
 /* Logo in sidebar */
-.sidebar-logo { text-align: center; padding-bottom: 1rem; align-items: center; border-bottom: 1px solid var(--border); }
+.sidebar-logo { text-align: center; padding-bottom: 1rem; align-items: center; border-bottom: 1px solid var(--border); overflow: hidden; margin: -1.5rem -1.5rem 0 -1.5rem; padding-top: 1.5rem; }
 .sidebar-logo p { color: var(--text-secondary); margin-top: 0.25rem; font-size: 0.85rem; }
-.logo { height: 8rem; vertical-align: middle; }
+.logo { height: 5rem; vertical-align: middle; }
 .logo-dark { display: none; }
 html[data-theme="dark"] .logo-light { display: none; }
 html[data-theme="dark"] .logo-dark { display: inline; }
