@@ -56,7 +56,7 @@ def load_probability_matrix(
     con: duckdb.DuckDBPyConnection,
     days_of_year: list[int],
     life_list_names: list[str],
-    counties: Optional[list[str]] = None,
+    state_counties: Optional[list[tuple[str, str]]] = None,
     states: Optional[list[str]] = None,
     country: Optional[str] = None,
     locality_ids: Optional[list[int]] = None,
@@ -78,9 +78,9 @@ def load_probability_matrix(
     if locality_ids:
         id_list = ", ".join(str(i) for i in locality_ids)
         geo_filter = f"h.locality_id IN ({id_list})"
-    elif counties:
-        county_list = ", ".join(f"'{c}'" for c in counties)
-        geo_filter = f"h.county IN ({county_list})"
+    elif state_counties:
+        pairs = " OR ".join(f"(h.state = '{s}' AND h.county = '{c}')" for s, c in state_counties)
+        geo_filter = f"({pairs})"
     elif states:
         state_list = ", ".join(f"'{s}'" for s in states)
         geo_filter = f"h.state IN ({state_list})"
@@ -200,7 +200,7 @@ def optimize_hotspots(
     start_date: date,
     end_date: date,
     k: int = 5,
-    counties: Optional[list[str]] = None,
+    state_counties: Optional[list[tuple[str, str]]] = None,
     states: Optional[list[str]] = None,
     country: Optional[str] = None,
     locality_ids: Optional[list[int]] = None,
@@ -211,8 +211,8 @@ def optimize_hotspots(
     days_of_year = date_range_to_days_of_year(start_date, end_date)
 
     geo_parts = []
-    if counties:
-        geo_parts.append(", ".join(counties))
+    if state_counties:
+        geo_parts.append(", ".join(c for _, c in state_counties))
     if states:
         geo_parts.append(", ".join(states))
     if country:
@@ -223,7 +223,7 @@ def optimize_hotspots(
     try:
         hotspot_info, prob_matrix, species_list = load_probability_matrix(
             con, days_of_year, life_list_names,
-            counties=counties, states=states, country=country,
+            state_counties=state_counties, states=states, country=country,
             locality_ids=locality_ids, target_species=target_species,
             exclude_locality_ids=exclude_locality_ids,
         )

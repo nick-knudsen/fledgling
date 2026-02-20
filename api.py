@@ -26,12 +26,17 @@ EBIRD_API_KEY = secrets["ebird"]["api_key"]
 app = FastAPI(title="Listr")
 
 
+class StateCounty(BaseModel):
+    state: str
+    county: str
+
+
 class OptimizeRequest(BaseModel):
     life_list: list[str] = []
     start_date: date
     end_date: date
     k: int = 5
-    counties: list[str] | None = None
+    state_counties: list[StateCounty] | None = None
     states: list[str] | None = None
     country: str | None = None
     center_lat: float | None = None
@@ -233,7 +238,7 @@ def run_optimization(req: OptimizeRequest):
         start_date=req.start_date,
         end_date=req.end_date,
         k=req.k,
-        counties=req.counties,
+        state_counties=[(sc.state, sc.county) for sc in req.state_counties] if req.state_counties else None,
         states=req.states,
         country=req.country,
         locality_ids=locality_ids,
