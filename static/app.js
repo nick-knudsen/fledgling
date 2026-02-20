@@ -19,6 +19,7 @@ let itinerary = []; // ordered array of hotspot data objects
 let resultsMode = "explore"; // "explore" or "plan"
 let lastResultsData = null;
 let isDragging = false;
+let routeLine = null;
 
 applyTheme(getSystemTheme());
 
@@ -815,22 +816,7 @@ function renderResults(data) {
             <button class="results-mode-btn${resultsMode === "explore" ? " active" : ""}" data-mode="explore">Explore</button>
             <button class="results-mode-btn${resultsMode === "plan" ? " active" : ""}" data-mode="plan">Plan</button>
         </div>
-        <div class="metrics">
-            <div class="metric-card">
-                <div class="value">${data.total_expected_lifers}</div>
-                <div class="label">Expected ${noun}</div>
-            </div>
-            <div class="metric-card">
-                <div class="value">${data.num_candidate_hotspots}</div>
-                <div class="label">Hotspots evaluated</div>
-            </div>
-            ${isSearch ? "" : `
-            <div class="metric-card">
-                <div class="value">${data.num_potential_lifers}</div>
-                <div class="label">Potential ${noun}</div>
-            </div>
-            `}
-        </div>
+        <div id="metrics-container"></div>
         <div id="results-view-container"></div>
         </div>
         <div class="results-map"><div id="map"></div></div>
@@ -939,7 +925,96 @@ function updateMap(fitToResults = false) {
     }
 }
 
+let routeRequestId = 0;
+
+function clearRoute() {
+    if (routeLine) { routeLine.remove(); routeLine = null; }
+}
+
+async function updateDrivingTime() {
+    const el = document.getElementById("driving-time-value");
+    clearRoute();
+    const requestId = ++routeRequestId;
+    if (!el) return;
+    if (itinerary.length < 2) {
+        el.textContent = "—";
+        return;
+    }
+    const coords = itinerary.map(h => `${h.longitude},${h.latitude}`).join(";");
+    try {
+        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`);
+        if (requestId !== routeRequestId) return;
+        const data = await res.json();
+        if (data.code === "Ok" && data.routes.length > 0) {
+            const seconds = data.routes[0].duration;
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.round((seconds % 3600) / 60);
+            el.textContent = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+            if (map) {
+                const geojson = data.routes[0].geometry;
+                const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+                routeLine = L.geoJSON(geojson, {
+                    style: { color: accent, weight: 3, opacity: 0.7 }
+                }).addTo(map);
+            }
+        } else {
+            el.textContent = "N/A";
+        }
+    } catch {
+        el.textContent = "N/A";
+    }
+}
+
+function renderMetrics() {
+    const data = lastResultsData;
+    if (!data) return;
+    const metricsEl = document.getElementById("metrics-container");
+    if (!metricsEl) return;
+    const isSearch = targetMode === "search";
+    const noun = (!isSearch && listType === "life") ? "lifers" : "targets";
+
+    if (resultsMode === "explore") {
+        const avgLifers = data.hotspots.length > 0
+            ? (data.hotspots.reduce((sum, h) => sum + h.target_species.reduce((s, sp) => s + sp.probability, 0), 0) / data.hotspots.length).toFixed(2)
+            : "0";
+        metricsEl.innerHTML = `<div class="metrics">
+            <div class="metric-card">
+                <div class="value">${avgLifers}</div>
+                <div class="label">Avg ${noun} per hotspot</div>
+            </div>
+            <div class="metric-card">
+                <div class="value">${data.num_candidate_hotspots}</div>
+                <div class="label">Hotspots evaluated</div>
+            </div>
+            ${isSearch ? "" : `
+            <div class="metric-card">
+                <div class="value">${data.num_potential_lifers}</div>
+                <div class="label">Potential ${noun}</div>
+            </div>`}
+        </div>`;
+    } else {
+        metricsEl.innerHTML = `<div class="metrics">
+            <div class="metric-card">
+                <div class="value">${data.total_expected_lifers}</div>
+                <div class="label">Expected ${noun}</div>
+            </div>
+            <div class="metric-card">
+                <div class="value" id="driving-time-value">—</div>
+                <div class="label">Driving time</div>
+            </div>
+            ${isSearch ? "" : `
+            <div class="metric-card">
+                <div class="value">${data.num_potential_lifers}</div>
+                <div class="label">Potential ${noun}</div>
+            </div>`}
+        </div>`;
+        updateDrivingTime();
+    }
+}
+
 function renderResultsView() {
+    renderMetrics();
     if (resultsMode === "explore") {
         renderExploreView();
     } else {
@@ -1089,6 +1164,7 @@ function renderPlanView() {
 
     if (itinerary.length === 0) {
         container.innerHTML = `<div class="empty-state"><p>Add hotspots from the Explore tab to build your itinerary.</p></div>`;
+        updateDrivingTime();
         return;
     }
 
@@ -1301,6 +1377,8 @@ function renderPlanView() {
     document.getElementById("collapse-all-btn").addEventListener("click", () => {
         container.querySelectorAll(".plan-card .hotspot-body").forEach(b => b.classList.remove("open"));
     });
+
+    updateDrivingTime();
 }
 
 function highlightHotspot(localityId, on) {
