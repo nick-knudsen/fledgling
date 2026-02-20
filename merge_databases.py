@@ -96,6 +96,15 @@ for i, (db_path, db_name, mtime) in enumerate(to_update):
     con.execute(f"DETACH {alias}")
     is_new = False
 
+print("\nSorting rolling_wilson_score by (day_of_year, locality_id) for query performance...")
+con.execute("""
+    CREATE TABLE rolling_wilson_score_sorted AS
+        SELECT * FROM rolling_wilson_score
+        ORDER BY day_of_year, locality_id;
+    DROP TABLE rolling_wilson_score;
+    ALTER TABLE rolling_wilson_score_sorted RENAME TO rolling_wilson_score;
+""")
+
 print("\n--- Combined database summary ---")
 for table in TABLES:
     cnt = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
