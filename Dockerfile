@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY api.py hotspot_optimizer.py run.py ./
+COPY api.py hotspot_optimizer.py ./
 COPY static/ static/
 
 # Data directory should be mounted as a volume at runtime:
