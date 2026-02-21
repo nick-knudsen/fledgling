@@ -22,7 +22,7 @@ DB_PATH = str(BASE_DIR / "data" / "combined.duckdb")
 
 EBIRD_API_KEY = os.environ["EBIRD_API_KEY"]
 
-app = FastAPI(title="Listr")
+app = FastAPI(title="Fledgling")
 
 
 class StateCounty(BaseModel):
@@ -189,7 +189,7 @@ def osrm_filter_hotspots(
             f"https://router.project-osrm.org/table/v1/driving/{coords_str}"
             f"?sources=0&annotations=duration"
         )
-        req = Request(url, headers={"User-Agent": "Listr/1.0"})
+        req = Request(url, headers={"User-Agent": "Fledgling/1.0"})
         try:
             with urlopen(req, timeout=30) as resp:
                 data = json.loads(resp.read())
