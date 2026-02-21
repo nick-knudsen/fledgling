@@ -24,6 +24,15 @@ EBIRD_API_KEY = os.environ["EBIRD_API_KEY"]
 
 app = FastAPI(title="Fledgling")
 
+BETA_USERS = {"gavin", "lachlan", "christian", "sylvia", "laura", "nick"}
+
+
+@app.get("/api/beta-check")
+def beta_check(name: str):
+    if name.strip().lower() in BETA_USERS:
+        return {"ok": True}
+    raise HTTPException(status_code=403, detail="Not on the beta list")
+
 
 class StateCounty(BaseModel):
     state: str

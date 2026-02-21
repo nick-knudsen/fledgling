@@ -1,3 +1,35 @@
+// Beta wall
+const betaOverlay = document.getElementById("beta-wall-overlay");
+const betaForm = document.getElementById("beta-wall-form");
+const betaNameInput = document.getElementById("beta-wall-name");
+
+if (localStorage.getItem("beta-name")) {
+    betaOverlay.classList.remove("open");
+} else {
+    betaNameInput.focus();
+}
+
+betaForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = betaNameInput.value.trim();
+    if (!name) return;
+    try {
+        const resp = await fetch(`/api/beta-check?name=${encodeURIComponent(name)}`);
+        if (!resp.ok) {
+            betaNameInput.style.borderColor = "var(--danger, #d93025)";
+            betaNameInput.placeholder = "Not on the beta list";
+            betaNameInput.value = "";
+            return;
+        }
+        localStorage.setItem("beta-name", name);
+        betaOverlay.classList.remove("open");
+    } catch {
+        betaNameInput.style.borderColor = "var(--danger, #d93025)";
+        betaNameInput.placeholder = "Something went wrong";
+        betaNameInput.value = "";
+    }
+});
+
 // Theme: browser/system preference is primary, manual toggle overrides until page reload
 function getSystemTheme() {
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -2261,8 +2293,12 @@ speciesInput.addEventListener("focus", () => {
     // Help button — shows welcome dialog
     document.getElementById("tour-help-btn").addEventListener("click", showWelcome);
 
-    // Auto-start on first visit — show welcome dialog
+    // Auto-start on first visit — show welcome dialog (after beta wall is dismissed)
     if (!localStorage.getItem(STORAGE_KEY)) {
-        setTimeout(showWelcome, 500);
+        if (localStorage.getItem("beta-name")) {
+            setTimeout(showWelcome, 500);
+        } else {
+            betaForm.addEventListener("submit", () => setTimeout(showWelcome, 300));
+        }
     }
 })();

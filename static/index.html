@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>fledgling - Hotspot Optimizer</title>
+    <title>fledgling - Hotspot Finder</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="/styles.css" />
@@ -140,6 +140,18 @@
                 <p>Select your search parameters to get started.</p>
             </div>
         </main>
+    </div>
+
+    <div class="help-dialog-overlay open" id="beta-wall-overlay" style="z-index: 3000;">
+        <div class="help-dialog" style="max-width: 360px;">
+            <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">Welcome to the beta!</p>
+            <p style="margin-bottom: 1rem;">Enter your first name to continue.</p>
+            <form id="beta-wall-form" style="display: flex; gap: 0.5rem;">
+                <input type="text" id="beta-wall-name" placeholder="First name" required
+                       style="flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 0.95rem;" />
+                <button type="submit" class="help-dialog-close" style="white-space: nowrap;">Enter</button>
+            </form>
+        </div>
     </div>
 
     <div class="help-dialog-overlay" id="walkthrough-welcome-overlay">
