@@ -24,7 +24,7 @@ EBIRD_API_KEY = os.environ["EBIRD_API_KEY"]
 
 app = FastAPI(title="Fledgling")
 
-BETA_USERS = {"gavin", "lachlan", "christian", "sylvia", "laura", "nick", "carter", "jayce", "cam", "alex"}
+BETA_USERS = {"gavin", "lachlan", "christian", "sylvia", "laura", "nick", "carter", "jayce", "cam", "alex", "jacob"}
 
 
 @app.get("/api/beta-check")
