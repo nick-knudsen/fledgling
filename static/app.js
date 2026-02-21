@@ -1630,39 +1630,49 @@ function renderPlanView() {
     // Pointer-based drag and drop reordering
     let dragState = null;
 
+    function getPointerY(e) {
+        return e.touches ? e.touches[0].clientY : e.clientY;
+    }
+
+    function startDrag(e, handle) {
+        e.preventDefault();
+        const card = handle.closest(".plan-card");
+        const srcIndex = parseInt(card.dataset.index);
+        const rect = card.getBoundingClientRect();
+
+        const placeholder = document.createElement("div");
+        placeholder.className = "drag-placeholder";
+        placeholder.style.height = rect.height + "px";
+
+        card.classList.add("dragging");
+        card.style.position = "fixed";
+        card.style.top = rect.top + "px";
+        card.style.left = rect.left + "px";
+        card.style.width = rect.width + "px";
+        card.style.zIndex = "1000";
+
+        card.parentNode.insertBefore(placeholder, card);
+
+        isDragging = true;
+        container.classList.add("drag-active");
+        dragState = { srcIndex, card, placeholder, startY: getPointerY(e), cardTop: rect.top };
+        document.addEventListener("mousemove", onDragMove);
+        document.addEventListener("mouseup", onDragEnd);
+        document.addEventListener("touchmove", onDragMove, { passive: false });
+        document.addEventListener("touchend", onDragEnd);
+    }
+
     container.querySelectorAll(".drag-handle").forEach(handle => {
-        handle.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            const card = handle.closest(".plan-card");
-            const srcIndex = parseInt(card.dataset.index);
-            const rect = card.getBoundingClientRect();
-
-            const placeholder = document.createElement("div");
-            placeholder.className = "drag-placeholder";
-            placeholder.style.height = rect.height + "px";
-
-            card.classList.add("dragging");
-            card.style.position = "fixed";
-            card.style.top = rect.top + "px";
-            card.style.left = rect.left + "px";
-            card.style.width = rect.width + "px";
-            card.style.zIndex = "1000";
-
-            card.parentNode.insertBefore(placeholder, card);
-
-            isDragging = true;
-            container.classList.add("drag-active");
-            dragState = { srcIndex, card, placeholder, startY: e.clientY, cardTop: rect.top };
-            document.addEventListener("mousemove", onDragMove);
-            document.addEventListener("mouseup", onDragEnd);
-        });
+        handle.addEventListener("mousedown", (e) => startDrag(e, handle));
+        handle.addEventListener("touchstart", (e) => startDrag(e, handle), { passive: false });
     });
 
     function onDragMove(e) {
         if (!dragState) return;
+        if (e.cancelable) e.preventDefault();
         const { card, placeholder, startY, cardTop } = dragState;
 
-        card.style.top = (cardTop + e.clientY - startY) + "px";
+        card.style.top = (cardTop + getPointerY(e) - startY) + "px";
 
         // Get all siblings that are either non-dragging cards or the placeholder
         const siblings = [...container.querySelectorAll(".plan-card:not(.dragging), .drag-placeholder")];
@@ -1676,7 +1686,7 @@ function renderPlanView() {
         if (placeholderIdx > 0) {
             const prev = siblings[placeholderIdx - 1];
             const prevRect = prev.getBoundingClientRect();
-            if (e.clientY < prevRect.top + prevRect.height / 2) {
+            if (getPointerY(e) < prevRect.top + prevRect.height / 2) {
                 movingCard = prev;
                 shouldMove = true;
             }
@@ -1685,7 +1695,7 @@ function renderPlanView() {
         if (!shouldMove && placeholderIdx < siblings.length - 1) {
             const next = siblings[placeholderIdx + 1];
             const nextRect = next.getBoundingClientRect();
-            if (e.clientY > nextRect.top + nextRect.height / 2) {
+            if (getPointerY(e) > nextRect.top + nextRect.height / 2) {
                 movingCard = next;
                 shouldMove = true;
             }
@@ -1719,6 +1729,8 @@ function renderPlanView() {
         if (!dragState) return;
         document.removeEventListener("mousemove", onDragMove);
         document.removeEventListener("mouseup", onDragEnd);
+        document.removeEventListener("touchmove", onDragMove);
+        document.removeEventListener("touchend", onDragEnd);
 
         const { srcIndex, card, placeholder } = dragState;
         isDragging = false;
@@ -2151,11 +2163,11 @@ speciesInput.addEventListener("focus", () => {
             return;
         }
 
-        // Scroll target into view
-        target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        // Scroll target into view — use "center" on mobile so there's room for the bubble
+        target.scrollIntoView({ behavior: "smooth", block: window.innerWidth <= 768 ? "center" : "nearest" });
 
-        // Small delay for scroll to settle
-        requestAnimationFrame(() => requestAnimationFrame(() => {
+        // Delay for scroll to settle before positioning bubble
+        setTimeout(() => {
             // Highlight target
             target.classList.add("walkthrough-target-highlight");
             currentHighlight = target;
@@ -2211,14 +2223,19 @@ speciesInput.addEventListener("focus", () => {
             if (nextBtn) nextBtn.addEventListener("click", () => { currentStep++; showStep(); });
             if (prevBtn) prevBtn.addEventListener("click", () => { currentStep--; showStep(); });
             if (doneBtn) doneBtn.addEventListener("click", endWalkthrough);
-        }));
+        }, 350);
     }
 
     function positionBubble(targetRect, prefer) {
         const gap = 14;
-        const bw = 320;
         const vw = window.innerWidth;
         const vh = window.innerHeight;
+        const bw = Math.min(320, vw - 24);
+
+        // On narrow screens, prefer vertical placement since there's no room beside
+        if (vw <= 768) {
+            prefer = (vh - targetRect.bottom - gap) >= 150 ? "bottom" : "top";
+        }
 
         // Reset
         bubble.style.maxWidth = bw + "px";
@@ -2301,4 +2318,59 @@ speciesInput.addEventListener("focus", () => {
             betaForm.addEventListener("submit", () => setTimeout(showWelcome, 300));
         }
     }
+})();
+
+// Mobile sidebar toggle
+(() => {
+    const toggle = document.getElementById("sidebar-toggle");
+    const sidebar = document.querySelector(".sidebar");
+    const mq = window.matchMedia("(max-width: 768px)");
+
+    function onMediaChange(e) {
+        if (e.matches) {
+            toggle.hidden = false;
+        } else {
+            toggle.hidden = true;
+            sidebar.classList.remove("collapsed");
+            sidebar.style.maxHeight = "";
+        }
+    }
+
+    function setExpanded() {
+        sidebar.classList.remove("collapsed");
+        sidebar.style.maxHeight = sidebar.scrollHeight + "px";
+        // After transition, remove inline max-height so content can resize naturally
+        sidebar.addEventListener("transitionend", function handler() {
+            if (!sidebar.classList.contains("collapsed")) sidebar.style.maxHeight = "";
+            sidebar.removeEventListener("transitionend", handler);
+        });
+        toggle.querySelector(".sidebar-toggle-label").textContent = "Filters";
+    }
+
+    function setCollapsed() {
+        sidebar.style.maxHeight = sidebar.scrollHeight + "px";
+        // Force reflow then collapse
+        sidebar.offsetHeight;
+        sidebar.classList.add("collapsed");
+        sidebar.style.maxHeight = "0";
+        toggle.querySelector(".sidebar-toggle-label").textContent = "Filters";
+    }
+
+    toggle.addEventListener("click", () => {
+        if (sidebar.classList.contains("collapsed")) {
+            setExpanded();
+        } else {
+            setCollapsed();
+        }
+    });
+
+    // Auto-collapse after search on mobile
+    document.getElementById("optimize-btn").addEventListener("click", () => {
+        if (mq.matches && !sidebar.classList.contains("collapsed")) {
+            setTimeout(setCollapsed, 300);
+        }
+    });
+
+    mq.addEventListener("change", onMediaChange);
+    onMediaChange(mq);
 })();

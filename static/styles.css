@@ -551,6 +551,87 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
     font-size: 0.75rem; font-weight: 600; line-height: 1; flex-shrink: 0;
 }
 
+/* Sidebar toggle — hidden by default, shown on mobile */
+.sidebar-toggle { display: none; }
+.mobile-footer { display: none; }
+
+/* Mobile: stacked layout */
+@media (max-width: 768px) {
+    .layout { flex-direction: column; height: auto; min-height: 100vh; }
+    .sidebar {
+        width: 100%; min-width: 0;
+        border-right: none; border-bottom: 1px solid var(--border);
+        padding: 1rem;
+        gap: 1rem;
+        overflow: hidden; transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+    }
+    .sidebar.collapsed {
+        max-height: 0; padding-top: 0; padding-bottom: 0;
+        border-bottom: none; opacity: 0;
+    }
+    .sidebar-toggle {
+        display: flex; align-items: center; gap: 0.4rem;
+        width: 100%; padding: 0.6rem 1rem;
+        padding-top: max(0.6rem, env(safe-area-inset-top));
+        padding-left: max(1rem, env(safe-area-inset-left));
+        padding-right: max(1rem, env(safe-area-inset-right));
+        background: var(--bg-surface); border: none; border-bottom: 1px solid var(--border);
+        color: var(--text); font-size: 0.85rem; font-weight: 500;
+        cursor: pointer; font-family: inherit;
+    }
+    .sidebar-toggle:hover { background: var(--hover); }
+    .sidebar-toggle-logo { height: 1.5rem; vertical-align: middle; }
+    .sidebar-toggle-logo.logo-dark { display: none; }
+    html[data-theme="dark"] .sidebar-toggle-logo.logo-light { display: none; }
+    html[data-theme="dark"] .sidebar-toggle-logo.logo-dark { display: inline; }
+    .sidebar-toggle-icon {
+        display: inline-block; width: 18px; height: 14px; position: relative;
+    }
+    .sidebar-toggle-icon::before {
+        content: ''; position: absolute; left: 0; top: 0;
+        width: 18px; height: 2px; background: currentColor; border-radius: 1px;
+        box-shadow: 0 6px 0 currentColor, 0 12px 0 currentColor;
+        transition: transform 0.2s;
+    }
+    .sidebar-footer { display: none; }
+    .mobile-footer {
+        display: block; padding: 1rem;
+        padding-bottom: max(1rem, env(safe-area-inset-bottom));
+        padding-left: max(1rem, env(safe-area-inset-left));
+        padding-right: max(1rem, env(safe-area-inset-right));
+        font-size: 0.7rem; line-height: 1.4; color: var(--text-secondary);
+        border-top: 1px solid var(--border); background: var(--bg-surface);
+    }
+    .mobile-footer a { color: var(--accent); text-decoration: none; }
+    .mobile-footer a:hover { text-decoration: underline; }
+    .mobile-footer .citation {
+        margin-top: 0.4rem; font-style: italic; color: var(--text-muted); font-size: 0.65rem;
+    }
+    .sidebar-logo { display: none; }
+    /* Prevent iOS Safari auto-zoom on input focus */
+    input, select, .multi-select-display { font-size: 16px; }
+    .main { padding: 0 1rem 1.5rem; scroll-padding-top: calc(250px + 1rem); }
+    .results-map { padding-top: 1rem; }
+    #map { height: 250px; }
+    .metrics { flex-direction: column; gap: 0.5rem; }
+    .metric-card { padding: 0.75rem 1rem; }
+    .metric-card .value { font-size: 1.35rem; }
+    .empty-state { padding: 2rem 1rem; }
+    .hotspot-header { padding: 0.75rem 1rem; }
+    .hotspot-body { padding: 0 1rem 0.75rem; }
+    .walkthrough-bubble { max-width: 280px; padding: 1rem; }
+    .help-dialog { padding: 1.25rem; }
+}
+
+/* Tablet */
+@media (max-width: 1024px) and (min-width: 769px) {
+    .sidebar { width: 280px; min-width: 280px; padding: 1.25rem; }
+    .sidebar-logo { margin: -1.25rem -1.25rem 0 -1.25rem; padding-top: 1.25rem; }
+    .logo { height: 4rem; }
+    .main { padding: 0 1.5rem 1.5rem; }
+    #map { height: 300px; }
+}
+
 /* Wide screen: map on right, hotspot list on left */
 @media (min-width: 1400px) {
     .layout { height: 100vh; }
