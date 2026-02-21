@@ -1404,7 +1404,7 @@ function wireHotspotSearch() {
 
     input.addEventListener("input", () => {
         const q = input.value.trim();
-        if (q.length < 2) {
+        if (q.length < 3) {
             dropdown.scrollTop = 0;
             dropdown.classList.remove("open");
             return;
@@ -1439,7 +1439,8 @@ function wireHotspotSearch() {
     });
 
     input.addEventListener("focus", () => {
-        if (dropdown.children.length > 0) {
+        const q = input.value.trim();
+        if (q.length >= 3 && dropdown.children.length > 0) {
             dropdown.classList.add("open");
         }
     });

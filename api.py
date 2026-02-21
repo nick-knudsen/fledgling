@@ -1,6 +1,6 @@
 import csv
 import math
-import tomllib
+import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
@@ -17,11 +17,10 @@ from pydantic import BaseModel
 
 from hotspot_optimizer import optimize_hotspots, load_probability_matrix, date_range_to_days_of_year
 
-DB_PATH = "data/combined.duckdb"
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = str(BASE_DIR / "data" / "combined.duckdb")
 
-with open("secrets.toml", "rb") as f:
-    secrets = tomllib.load(f)
-EBIRD_API_KEY = secrets["ebird"]["api_key"]
+EBIRD_API_KEY = os.environ["EBIRD_API_KEY"]
 
 app = FastAPI(title="Listr")
 
@@ -80,7 +79,7 @@ def add_recent_observations(hotspots: list[dict]) -> list[dict]:
 def get_region_names():
     """Return a mapping of eBird region codes to display names."""
     lookup = {}
-    with open(Path("data/subnational1.csv"), newline="", encoding="utf-8") as f:
+    with open(BASE_DIR / "data" / "subnational1.csv", newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             code = row["country_code"]
             lookup[code] = row["country_name"]
@@ -295,7 +294,7 @@ def search_hotspots(
     if len(q) < 2:
         return []
 
-    safe_q = q.replace("'", "''")
+    params = [f"%{q}%"]
 
     geo_filter = "1=1"
     if state_counties:
@@ -303,22 +302,26 @@ def search_hotspots(
         for pair in state_counties.split(","):
             parts = pair.split("|")
             if len(parts) == 2:
-                s, c = parts[0].replace("'", "''"), parts[1].replace("'", "''")
-                pairs.append(f"(state = '{s}' AND county = '{c}')")
+                pairs.append("(state = ? AND county = ?)")
+                params.extend(parts)
         if pairs:
             geo_filter = f"({' OR '.join(pairs)})"
     elif states:
-        state_list = ", ".join(f"'{s.replace(chr(39), chr(39)+chr(39))}'" for s in states.split(","))
-        geo_filter = f"state IN ({state_list})"
+        state_list = states.split(",")
+        placeholders = ", ".join("?" for _ in state_list)
+        geo_filter = f"state IN ({placeholders})"
+        params.extend(state_list)
     elif country:
-        geo_filter = f"country = '{country.replace(chr(39), chr(39)+chr(39))}'"
+        geo_filter = "country = ?"
+        params.append(country)
 
     con = duckdb.connect(DB_PATH, read_only=True)
     try:
         rows = con.execute(
             f"SELECT locality_id, locality, latitude, longitude, county, state "
-            f"FROM hotspots WHERE locality ILIKE '%{safe_q}%' AND {geo_filter} "
-            f"ORDER BY locality"
+            f"FROM hotspots WHERE locality ILIKE ? AND {geo_filter} "
+            f"ORDER BY locality",
+            params,
         ).fetchall()
     finally:
         con.close()
@@ -402,4 +405,4 @@ def get_hotspot_details(req: HotspotDetailRequest):
 
 
 # Serve the frontend
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory=str(BASE_DIR / "static"), html=True), name="static")
