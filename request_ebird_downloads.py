@@ -23,7 +23,8 @@ ALL_STATES = [
 ]
 
 # Already requested (alphabetically through HI)
-ALREADY_REQUESTED = {"AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DC", "DE", "FL", "GA", "HI", "ID", "VT"}
+ALREADY_REQUESTED = {"AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DC", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME",
+    "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "VT"}
 
 REMAINING = [s for s in ALL_STATES if s not in ALREADY_REQUESTED]
 
