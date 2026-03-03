@@ -3,3 +3,5 @@ fastapi==0.129.0
 uvicorn==0.40.0
 numpy==2.3.4
 pandas==2.3.3
+httpx==0.28.1
+playwright==1.58.0
