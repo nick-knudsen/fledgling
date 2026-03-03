@@ -6,7 +6,8 @@ atomic swap at the end.
 
 Usage:
     python ebird_pipeline.py                    # full run
-    python ebird_pipeline.py --skip-download    # resume processing (tar already extracted)
+    python ebird_pipeline.py --skip-download    # skip download, extract tar + process
+    python ebird_pipeline.py --skip-extract     # skip download + extract, process from data/raw/
     python ebird_pipeline.py --swap-only        # just swap combined_new -> combined
 """
 
@@ -18,7 +19,6 @@ import shutil
 import sys
 import tarfile
 import time
-import zipfile
 from datetime import datetime
 from getpass import getpass
 from pathlib import Path
@@ -121,46 +121,53 @@ def download_world_dataset(cookies, dest_path):
 # Extraction
 # ---------------------------------------------------------------------------
 
-def extract_archive(archive_path, extract_dir):
-    """Extract a tar or zip archive, flattening directory structure."""
+def extract_tar(archive_path, extract_dir):
+    """Extract tar archive, flattening directory structure. Deletes tar when done."""
     archive_path = Path(archive_path)
     extract_dir = Path(extract_dir)
     extract_dir.mkdir(parents=True, exist_ok=True)
 
     log.info(f"Extracting {archive_path}...")
-
-    if tarfile.is_tarfile(archive_path):
-        with tarfile.open(archive_path) as tf:
-            members = tf.getmembers()
-            log.info(f"  Archive contains {len(members)} entries")
-            for member in members:
-                if member.isfile():
-                    member.name = os.path.basename(member.name)
-                    tf.extract(member, extract_dir)
-                    log.info(f"  Extracted: {member.name}")
-    elif zipfile.is_zipfile(archive_path):
-        with zipfile.ZipFile(archive_path) as zf:
-            for member in zf.infolist():
-                if member.is_dir():
-                    continue
-                name = os.path.basename(member.filename)
-                dest = extract_dir / name
-                with zf.open(member) as src, open(dest, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
-                log.info(f"  Extracted: {name}")
-    else:
-        raise RuntimeError(f"Unknown archive format: {archive_path}")
+    with tarfile.open(archive_path) as tf:
+        members = tf.getmembers()
+        log.info(f"  Archive contains {len(members)} entries")
+        for member in members:
+            if member.isfile():
+                member.name = os.path.basename(member.name)
+                tf.extract(member, extract_dir)
+                log.info(f"  Extracted: {member.name}")
 
     archive_path.unlink()
-    log.info(f"Deleted archive to reclaim disk space")
+    log.info("Deleted tar to reclaim disk space")
 
-    extracted = sorted(extract_dir.iterdir())
-    log.info(f"Extracted {len(extracted)} files:")
+
+def decompress_gz_files(directory):
+    """Decompress any .gz files in directory. Deletes .gz files when done."""
+    import gzip
+    directory = Path(directory)
+    gz_files = sorted(directory.glob("*.gz"))
+    if not gz_files:
+        return
+
+    log.info(f"Decompressing {len(gz_files)} .gz files...")
+    for gz_file in gz_files:
+        out_path = directory / gz_file.stem  # strips .gz
+        # Skip if already decompressed
+        if out_path.exists():
+            log.info(f"  {out_path.name} already exists, skipping")
+            continue
+        log.info(f"  Decompressing {gz_file.name} (this may take a while)...")
+        with gzip.open(gz_file, "rb") as src, open(out_path, "wb") as dst:
+            shutil.copyfileobj(src, dst, length=1024 * 1024)
+        gz_file.unlink()
+        size_gb = out_path.stat().st_size / (1024 ** 3)
+        log.info(f"  Decompressed: {out_path.name} ({size_gb:.1f} GB)")
+
+    extracted = sorted(directory.iterdir())
+    log.info(f"{len(extracted)} files in {directory}:")
     for f in extracted:
         size_mb = f.stat().st_size / (1024 ** 2)
         log.info(f"  {f.name} ({size_mb:,.0f} MB)")
-
-    return extracted
 
 
 # ---------------------------------------------------------------------------
@@ -517,7 +524,9 @@ def main():
 
     parser = argparse.ArgumentParser(description="Automated eBird world data pipeline")
     parser.add_argument("--skip-download", action="store_true",
-                        help="Skip download+extract, resume processing from data/raw/")
+                        help="Skip download, but still extract and process")
+    parser.add_argument("--skip-extract", action="store_true",
+                        help="Skip download and extract, resume processing from data/raw/")
     parser.add_argument("--swap-only", action="store_true",
                         help="Only swap combined_new.duckdb -> combined.duckdb")
     parser.add_argument("--sort-only", action="store_true",
@@ -551,7 +560,7 @@ def main():
     SAMPLING_DIR.mkdir(parents=True, exist_ok=True)
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
-    if not args.skip_download:
+    if not args.skip_download and not args.skip_extract:
         print("eBird credentials (not stored):")
         username = input("  Username: ").strip()
         password = getpass("  Password: ")
@@ -560,7 +569,13 @@ def main():
 
         archive_path = RAW_DIR / f"ebd_{RELEASE}.tar"
         download_world_dataset(cookies, archive_path)
-        extract_archive(archive_path, RAW_DIR)
+        extract_tar(archive_path, RAW_DIR)
+        decompress_gz_files(RAW_DIR)
+    elif args.skip_download and not args.skip_extract:
+        archive_path = RAW_DIR / f"ebd_{RELEASE}.tar"
+        if archive_path.exists():
+            extract_tar(archive_path, RAW_DIR)
+        decompress_gz_files(RAW_DIR)
 
     # Detect structure and get per-region file list
     log.info("\nDetecting data structure...")
