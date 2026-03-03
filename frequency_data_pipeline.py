@@ -27,7 +27,7 @@ def run_pipeline(region_code, input_path, combined_db_path,
     con.execute("SET preserve_insertion_order = false;")
 
     try:
-        _run_staging(con, region_code, input_path)
+        _run_staging(con, input_path)
         stats = _insert_into_combined(con, combined_db_path)
     finally:
         con.close()
