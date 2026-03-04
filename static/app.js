@@ -863,8 +863,10 @@ async function runOptimization() {
     const body = {
         start_date: getDateValue("start"),
         end_date: getDateValue("end"),
-        k: parseInt(document.getElementById("k-input").value),
+        k: parseInt(document.getElementById("k-input").value) || 5,
     };
+    const kInput = document.getElementById("k-input");
+    if (!kInput.value) kInput.value = 5;
 
     if (targetMode === "search") {
         body.target_species = selectedSpecies.comName;
