@@ -93,10 +93,12 @@ def load_probability_matrix(
 
     if target_species:
         species_filter = f"r.common_name = '{target_species.replace(chr(39), chr(39)+chr(39))}'"
-    else:
+    elif life_list_names:
         life_df = pd.DataFrame({"common_name": life_list_names})
         con.register("life_list_view", life_df)
         species_filter = "r.common_name NOT IN (SELECT common_name FROM life_list_view)"
+    else:
+        species_filter = "1=1"
 
     # Cap hotspots to prevent memory/timeout issues on broad queries.
     # Keep only the most-observed hotspots when the candidate set is too large.
@@ -137,7 +139,7 @@ def load_probability_matrix(
 
     df = con.execute(query).fetchdf()
 
-    if not target_species:
+    if not target_species and life_list_names:
         con.unregister("life_list_view")
 
     if df.empty:

@@ -1824,8 +1824,8 @@ let allSpecies = []; // loaded from API
 let selectedSpecies = null;
 let activeDropdownIndex = -1;
 
-// Ensure button is disabled on page load (browsers may persist form state)
-document.getElementById("optimize-btn").disabled = true;
+// Set initial button state based on default mode
+updateOptimizeBtn();
 
 fetch("/api/species")
     .then(r => r.json())
@@ -2010,7 +2010,8 @@ speciesInput.addEventListener("focus", () => {
             selector: "#optimize-btn",
             title: "Find Hotspots",
             desc: "Run the optimizer to find the best birding hotspots for your targets, area, and dates.",
-            prefer: "right"
+            prefer: "right",
+            mobilePrefer: "top"
         },
         {
             selector: ".results-mode-toggle",
@@ -2077,10 +2078,20 @@ speciesInput.addEventListener("focus", () => {
     const dotsEl = document.getElementById("walkthrough-dots");
     const btnsEl = document.getElementById("walkthrough-btns");
 
+    function preventScroll(e) { e.preventDefault(); }
+    function lockUserScroll() {
+        window.addEventListener("wheel", preventScroll, { passive: false });
+        window.addEventListener("touchmove", preventScroll, { passive: false });
+    }
+    function unlockUserScroll() {
+        window.removeEventListener("wheel", preventScroll);
+        window.removeEventListener("touchmove", preventScroll);
+    }
+
     function startWalkthrough() {
         currentStep = 0;
         overlay.classList.add("open");
-        if (window.innerWidth <= 768) document.body.style.overflow = "hidden";
+        lockUserScroll();
         showStep();
     }
 
@@ -2099,7 +2110,7 @@ speciesInput.addEventListener("focus", () => {
 
     function endWalkthrough() {
         overlay.classList.remove("open");
-        document.body.style.overflow = "";
+        unlockUserScroll();
         if (currentHighlight) {
             currentHighlight.classList.remove("walkthrough-target-highlight");
             currentHighlight = null;
@@ -2220,64 +2231,71 @@ speciesInput.addEventListener("focus", () => {
             return;
         }
 
-        // Highlight target
-        target.classList.add("walkthrough-target-highlight");
-        currentHighlight = target;
+        // Scroll window so target is visible, then measure after paint settles
+        const targetTop = target.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: Math.max(0, targetTop - window.innerHeight / 2 + target.offsetHeight / 2), behavior: "instant" });
 
-        // Cut out the target from the backdrop
-        const rect = target.getBoundingClientRect();
-        const pad = 8;
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        const rx = rect.width / 2 + pad;
-        const ry = rect.height / 2 + pad;
-        backdrop.style.clipPath = `polygon(
-            0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
-            ${cx - rx}px ${cy - ry}px,
-            ${cx - rx}px ${cy + ry}px,
-            ${cx + rx}px ${cy + ry}px,
-            ${cx + rx}px ${cy - ry}px,
-            ${cx - rx}px ${cy - ry}px
-        )`;
+        // Double rAF ensures scroll has fully applied before measuring
+        requestAnimationFrame(() => { requestAnimationFrame(() => {
+            // Highlight target
+            target.classList.add("walkthrough-target-highlight");
+            currentHighlight = target;
 
-        // Position bubble
-        positionBubble(rect, step.prefer);
+            // Cut out the target from the backdrop
+            const rect = target.getBoundingClientRect();
+            const pad = 8;
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const rx = rect.width / 2 + pad;
+            const ry = rect.height / 2 + pad;
+            backdrop.style.clipPath = `polygon(
+                0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
+                ${cx - rx}px ${cy - ry}px,
+                ${cx - rx}px ${cy + ry}px,
+                ${cx + rx}px ${cy + ry}px,
+                ${cx + rx}px ${cy - ry}px,
+                ${cx - rx}px ${cy - ry}px
+            )`;
 
-        // Content
-        titleEl.textContent = step.title;
-        descEl.textContent = step.desc;
+            // Position bubble
+            positionBubble(rect, step.prefer, step.mobilePrefer);
 
-        // Dots
-        dotsEl.innerHTML = steps.map((_, i) =>
-            `<div class="walkthrough-dot${i === currentStep ? " active" : ""}"></div>`
-        ).join("");
+            // Content
+            titleEl.textContent = step.title;
+            descEl.textContent = step.desc;
 
-        // Buttons
-        let btns = "";
-        if (currentStep === 0) {
-            btns += `<button class="walkthrough-btn skip" id="wt-skip">Skip</button>`;
-            btns += `<button class="walkthrough-btn primary" id="wt-next">Next</button>`;
-        } else if (currentStep === steps.length - 1) {
-            btns += `<button class="walkthrough-btn secondary" id="wt-prev">Back</button>`;
-            btns += `<button class="walkthrough-btn primary" id="wt-done">Done</button>`;
-        } else {
-            btns += `<button class="walkthrough-btn secondary" id="wt-prev">Back</button>`;
-            btns += `<button class="walkthrough-btn primary" id="wt-next">Next</button>`;
-        }
-        btnsEl.innerHTML = btns;
+            // Dots
+            dotsEl.innerHTML = steps.map((_, i) =>
+                `<div class="walkthrough-dot${i === currentStep ? " active" : ""}"></div>`
+            ).join("");
 
-        // Wire buttons
-        const skipBtn = document.getElementById("wt-skip");
-        const nextBtn = document.getElementById("wt-next");
-        const prevBtn = document.getElementById("wt-prev");
-        const doneBtn = document.getElementById("wt-done");
-        if (skipBtn) skipBtn.addEventListener("click", endWalkthrough);
-        if (nextBtn) nextBtn.addEventListener("click", () => { currentStep++; showStep(); });
-        if (prevBtn) prevBtn.addEventListener("click", () => { currentStep--; showStep(); });
-        if (doneBtn) doneBtn.addEventListener("click", endWalkthrough);
+            // Buttons
+            let btns = "";
+            if (currentStep === 0) {
+                btns += `<button class="walkthrough-btn skip" id="wt-skip">Skip</button>`;
+                btns += `<button class="walkthrough-btn primary" id="wt-next">Next</button>`;
+            } else if (currentStep === steps.length - 1) {
+                btns += `<button class="walkthrough-btn secondary" id="wt-prev">Back</button>`;
+                btns += `<button class="walkthrough-btn primary" id="wt-done">Done</button>`;
+            } else {
+                btns += `<button class="walkthrough-btn secondary" id="wt-prev">Back</button>`;
+                btns += `<button class="walkthrough-btn primary" id="wt-next">Next</button>`;
+            }
+            btnsEl.innerHTML = btns;
+
+            // Wire buttons
+            const skipBtn = document.getElementById("wt-skip");
+            const nextBtn = document.getElementById("wt-next");
+            const prevBtn = document.getElementById("wt-prev");
+            const doneBtn = document.getElementById("wt-done");
+            if (skipBtn) skipBtn.addEventListener("click", endWalkthrough);
+            if (nextBtn) nextBtn.addEventListener("click", () => { currentStep++; showStep(); });
+            if (prevBtn) prevBtn.addEventListener("click", () => { currentStep--; showStep(); });
+            if (doneBtn) doneBtn.addEventListener("click", endWalkthrough);
+        }); });
     }
 
-    function positionBubble(targetRect, prefer) {
+    function positionBubble(targetRect, prefer, mobilePrefer) {
         const gap = 14;
         const vw = window.innerWidth;
         const vh = window.innerHeight;
@@ -2285,7 +2303,7 @@ speciesInput.addEventListener("focus", () => {
 
         // On narrow screens, prefer vertical placement since there's no room beside
         if (vw <= 768) {
-            prefer = (vh - targetRect.bottom - gap) >= 150 ? "bottom" : "top";
+            prefer = mobilePrefer || ((vh - targetRect.bottom - gap) >= 150 ? "bottom" : "top");
         }
 
         // Reset
