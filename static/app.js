@@ -102,7 +102,9 @@ let lifelistSource = "fresh"; // "upload" or "fresh"
 
 function updateOptimizeBtn() {
     const btn = document.getElementById("optimize-btn");
-    if (targetMode === "search") {
+    if (searchMode === "driving" && centerLat === null) {
+        btn.disabled = true;
+    } else if (targetMode === "search") {
         btn.disabled = !selectedSpecies;
     } else if (lifelistSource === "fresh") {
         btn.disabled = false;
@@ -403,6 +405,7 @@ document.querySelectorAll(".search-mode-btn").forEach(btn => {
         searchMode = btn.dataset.mode;
         document.getElementById("region-inputs").style.display = searchMode === "region" ? "" : "none";
         document.getElementById("driving-inputs").style.display = searchMode === "driving" ? "" : "none";
+        updateOptimizeBtn();
     });
 });
 
@@ -463,6 +466,7 @@ function selectLocation(result) {
     locationInput.value = result.display_name;
     locationDropdown.classList.remove("open");
     locationSelected.textContent = `${centerLat.toFixed(4)}, ${centerLon.toFixed(4)}`;
+    updateOptimizeBtn();
 }
 
 locationInput.addEventListener("keydown", (e) => {
@@ -501,6 +505,7 @@ document.getElementById("use-my-location").addEventListener("click", () => {
             locationDropdown.classList.remove("open");
             locationSelected.textContent = `${centerLat.toFixed(4)}, ${centerLon.toFixed(4)}`;
             btn.disabled = false;
+            updateOptimizeBtn();
         },
         (err) => {
             alert("Could not get your location. Please search manually.");
