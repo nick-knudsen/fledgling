@@ -927,8 +927,11 @@ async function runOptimization() {
         const data = await resp.json();
         renderResults(data);
     } catch (err) {
+        const msg = err instanceof TypeError
+            ? "Connection lost. Please check your internet and try again."
+            : err.message;
         document.getElementById("results").innerHTML =
-            `<div class="empty-state"><p>Error: ${err.message}</p></div>`;
+            `<div class="empty-state"><p>${msg}</p></div>`;
     } finally {
         btn.disabled = false;
         btn.textContent = "Find Hotspots";
