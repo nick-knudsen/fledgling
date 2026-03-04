@@ -98,17 +98,27 @@ def load_probability_matrix(
         con.register("life_list_view", life_df)
         species_filter = "r.common_name NOT IN (SELECT common_name FROM life_list_view)"
 
+    # Cap hotspots to prevent memory/timeout issues on broad queries.
+    # Keep only the most-observed hotspots when the candidate set is too large.
+    MAX_HOTSPOTS = 5000
+
     query = f"""
-    WITH filtered_freq AS (
+    WITH candidate_hotspots AS (
+        SELECT h.locality_id
+        FROM hotspots h
+        WHERE {geo_filter}
+        ORDER BY h.total_checklists DESC
+        LIMIT {MAX_HOTSPOTS}
+    ),
+    filtered_freq AS (
         SELECT
             r.locality_id,
             r.common_name,
             MAX(GREATEST(r.wilson_lower_bound, 0)) AS detection_prob
         FROM rolling_wilson_score r
-        JOIN hotspots h ON r.locality_id = h.locality_id
         WHERE r.day_of_year IN ({day_list})
           AND {species_filter}
-          AND {geo_filter}
+          AND r.locality_id IN (SELECT locality_id FROM candidate_hotspots)
         GROUP BY r.locality_id, r.common_name
     )
     SELECT
