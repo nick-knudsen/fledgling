@@ -1249,11 +1249,11 @@ function renderExploreView() {
         const speciesRows = h.target_species.slice(0, 25).map(sp => `
             <tr>
                 <td>${sp.common_name}</td>
-                <td>
+                <td style="white-space:nowrap">
                     <span class="prob-bar" style="width: ${sp.probability * 100}px"></span>
                     ${(sp.probability * 100).toFixed(1)}%
                 </td>
-                <td>${sp.recently_observed ? "\u2705" : "\u274C"}</td>
+                <td style="text-align:center">${sp.recently_observed ? "\u2705" : "\u274C"}</td>
             </tr>
         `).join("");
 
@@ -1560,11 +1560,11 @@ function renderPlanView() {
         const speciesRows = h.target_species.slice(0, 25).map(sp => `
             <tr>
                 <td>${sp.common_name}</td>
-                <td>
+                <td style="white-space:nowrap">
                     <span class="prob-bar" style="width: ${sp.probability * 100}px"></span>
                     ${(sp.probability * 100).toFixed(1)}%
                 </td>
-                <td>${sp.recently_observed ? "\u2705" : "\u274C"}</td>
+                <td style="text-align:center">${sp.recently_observed ? "\u2705" : "\u274C"}</td>
             </tr>
         `).join("");
 
@@ -1611,7 +1611,7 @@ function renderPlanView() {
         const combinedRows = combinedProbs.map(sp => `
             <tr>
                 <td>${sp.common_name}</td>
-                <td>
+                <td style="white-space:nowrap">
                     <span class="prob-bar" style="width: ${sp.probability * 100}px"></span>
                     ${(sp.probability * 100).toFixed(1)}%
                 </td>
