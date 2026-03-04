@@ -23,41 +23,50 @@
             <div class="form-group">
                 <label>Target Species...</label>
                 <div class="list-type-toggle">
-                    <button class="target-mode-btn active" data-mode="search">By Search</button>
-                    <button class="target-mode-btn" data-mode="lifelist">You Haven't Seen</button>
+                    <button class="target-mode-btn" data-mode="search">By Search</button>
+                    <button class="target-mode-btn active" data-mode="lifelist">You Haven't Seen</button>
                 </div>
-                <div id="target-search-inputs">
+                <div id="target-search-inputs" style="display: none;">
                     <div class="species-search">
                         <input type="text" id="species-input" placeholder="Enter species name or code..." autocomplete="off" />
                         <div class="species-dropdown" id="species-dropdown"></div>
                     </div>
                 </div>
-                <div id="target-lifelist-inputs" style="display: none;">
-                    <input type="file" id="csv-input" accept=".csv" />
-                    <div style="display: flex; align-items: center; gap: 0.4rem;">
-                        <div id="file-status" class="form-hint">Upload your MyEBirdData.csv from eBird</div>
-                        <button type="button" class="help-btn" id="upload-help-btn" aria-label="Help" title="Help">?</button>
-                    </div>
-                    <div class="help-dialog-overlay" id="upload-help-overlay">
-                        <div class="help-dialog">
-                            <p><a href="https://ebird.org/downloadMyData" target="_blank" rel="noopener noreferrer">Download your data from eBird</a> and upload the unzipped file here. Your data are not stored on this site in any way.</p>
-                            <button type="button" class="help-dialog-close" id="upload-help-close">OK</button>
-                        </div>
-                    </div>
-                    <label style="margin-top: 0.4rem;">List Scope</label>
+                <div id="target-lifelist-inputs">
                     <div class="list-type-toggle">
-                        <button class="list-type-btn active" data-type="life">Life</button>
-                        <button class="list-type-btn" data-type="year">Year</button>
+                        <button class="lifelist-source-btn" data-source="upload">Upload Life List</button>
+                        <button class="lifelist-source-btn active" data-source="fresh">Start Fresh</button>
                     </div>
-                    <select id="scope-country" disabled style="margin-top: 0.4rem;">
-                        <option value="">World (all countries)</option>
-                    </select>
-                    <select id="scope-state" disabled style="margin-top: 0.4rem;">
-                        <option value="">All states/provinces</option>
-                    </select>
-                    <select id="scope-county" disabled style="margin-top: 0.4rem;">
-                        <option value="">All counties</option>
-                    </select>
+                    <div id="lifelist-upload-inputs" style="display: none;">
+                        <input type="file" id="csv-input" accept=".csv" />
+                        <div style="display: flex; align-items: center; gap: 0.4rem;">
+                            <div id="file-status" class="form-hint">Upload your MyEBirdData.csv from eBird</div>
+                            <button type="button" class="help-btn" id="upload-help-btn" aria-label="Help" title="Help">?</button>
+                        </div>
+                        <div class="help-dialog-overlay" id="upload-help-overlay">
+                            <div class="help-dialog">
+                                <p><a href="https://ebird.org/downloadMyData" target="_blank" rel="noopener noreferrer">Download your data from eBird</a> and upload the unzipped file here. Your data are not stored on this site in any way.</p>
+                                <button type="button" class="help-dialog-close" id="upload-help-close">OK</button>
+                            </div>
+                        </div>
+                        <label style="margin-top: 0.4rem;">List Scope</label>
+                        <div class="list-type-toggle">
+                            <button class="list-type-btn active" data-type="life">Life</button>
+                            <button class="list-type-btn" data-type="year">Year</button>
+                        </div>
+                        <select id="scope-country" disabled style="margin-top: 0.4rem;">
+                            <option value="">World (all countries)</option>
+                        </select>
+                        <select id="scope-state" disabled style="margin-top: 0.4rem;">
+                            <option value="">All states/provinces</option>
+                        </select>
+                        <select id="scope-county" disabled style="margin-top: 0.4rem;">
+                            <option value="">All counties</option>
+                        </select>
+                    </div>
+                    <div id="lifelist-fresh-inputs">
+                        <div class="form-hint">We'll find hotspots with the most species.</div>
+                    </div>
                 </div>
             </div>
 
@@ -185,6 +194,7 @@
     <div class="walkthrough-overlay" id="walkthrough-overlay">
         <div class="walkthrough-backdrop" id="walkthrough-backdrop"></div>
         <div class="walkthrough-bubble" id="walkthrough-bubble">
+            <button class="walkthrough-close" id="walkthrough-close" aria-label="Close">&times;</button>
             <div class="walkthrough-title" id="walkthrough-title"></div>
             <div class="walkthrough-desc" id="walkthrough-desc"></div>
             <div class="walkthrough-footer">

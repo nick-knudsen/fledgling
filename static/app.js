@@ -97,12 +97,15 @@ function updateMapTiles() {
 }
 
 // Target species mode toggle (search / lifelist)
-let targetMode = "search"; // "search" or "lifelist"
+let targetMode = "lifelist"; // "search" or "lifelist"
+let lifelistSource = "fresh"; // "upload" or "fresh"
 
 function updateOptimizeBtn() {
     const btn = document.getElementById("optimize-btn");
     if (targetMode === "search") {
         btn.disabled = !selectedSpecies;
+    } else if (lifelistSource === "fresh") {
+        btn.disabled = false;
     } else {
         btn.disabled = allObservations.length === 0;
     }
@@ -115,6 +118,18 @@ document.querySelectorAll(".target-mode-btn").forEach(btn => {
         targetMode = btn.dataset.mode;
         document.getElementById("target-search-inputs").style.display = targetMode === "search" ? "" : "none";
         document.getElementById("target-lifelist-inputs").style.display = targetMode === "lifelist" ? "" : "none";
+        updateOptimizeBtn();
+    });
+});
+
+// Lifelist source toggle (upload / fresh)
+document.querySelectorAll(".lifelist-source-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll(".lifelist-source-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        lifelistSource = btn.dataset.source;
+        document.getElementById("lifelist-upload-inputs").style.display = lifelistSource === "upload" ? "" : "none";
+        document.getElementById("lifelist-fresh-inputs").style.display = lifelistSource === "fresh" ? "" : "none";
         updateOptimizeBtn();
     });
 });
@@ -844,6 +859,8 @@ async function runOptimization() {
 
     if (targetMode === "search") {
         body.target_species = selectedSpecies.comName;
+    } else if (lifelistSource === "fresh") {
+        body.life_list = [];
     } else {
         body.life_list = lifeList;
     }
@@ -1919,7 +1936,7 @@ speciesInput.addEventListener("focus", () => {
 // ── Walkthrough ──────────────────────────────────────────────────────
 (function() {
     const STORAGE_KEY = "walkthrough-completed";
-    const FIRST_RESULTS_STEP = 5;
+    const FIRST_RESULTS_STEP = 6;
 
     const MOCK_DATA = {
         num_candidate_hotspots: 47,
@@ -1969,6 +1986,13 @@ speciesInput.addEventListener("focus", () => {
             desc: "...or upload your eBird data to find birds you haven't seen yet.",
             prefer: "right",
             onEnter: "switchToLifelist"
+        },
+        {
+            selector: ".form-group:has(.target-mode-btn)",
+            title: "Choose Your Targets",
+            desc: "New to birding? Use Start Fresh to find hotspots with the most species — no eBird account needed.",
+            prefer: "right",
+            onEnter: "switchToFresh"
         },
         {
             selector: ".form-group:has(.search-mode-btn)",
@@ -2033,6 +2057,12 @@ speciesInput.addEventListener("focus", () => {
             desc: "Toggle between light and dark themes.",
             prefer: "right"
         },
+        {
+            selector: "#tour-help-btn",
+            title: "Need Help?",
+            desc: "You can retake this tour any time by clicking this button.",
+            prefer: "right"
+        },
     ];
 
     let currentStep = 0;
@@ -2050,6 +2080,7 @@ speciesInput.addEventListener("focus", () => {
     function startWalkthrough() {
         currentStep = 0;
         overlay.classList.add("open");
+        if (window.innerWidth <= 768) document.body.style.overflow = "hidden";
         showStep();
     }
 
@@ -2068,18 +2099,25 @@ speciesInput.addEventListener("focus", () => {
 
     function endWalkthrough() {
         overlay.classList.remove("open");
+        document.body.style.overflow = "";
         if (currentHighlight) {
             currentHighlight.classList.remove("walkthrough-target-highlight");
             currentHighlight = null;
         }
         cleanupMockResults();
-        // Reset target mode back to search
-        targetMode = "search";
+        // Reset target mode back to defaults
+        targetMode = "lifelist";
+        lifelistSource = "fresh";
         document.querySelectorAll(".target-mode-btn").forEach(b => {
-            b.classList.toggle("active", b.dataset.mode === "search");
+            b.classList.toggle("active", b.dataset.mode === "lifelist");
         });
-        document.getElementById("target-search-inputs").style.display = "";
-        document.getElementById("target-lifelist-inputs").style.display = "none";
+        document.querySelectorAll(".lifelist-source-btn").forEach(b => {
+            b.classList.toggle("active", b.dataset.source === "fresh");
+        });
+        document.getElementById("target-search-inputs").style.display = "none";
+        document.getElementById("target-lifelist-inputs").style.display = "";
+        document.getElementById("lifelist-upload-inputs").style.display = "none";
+        document.getElementById("lifelist-fresh-inputs").style.display = "";
         updateOptimizeBtn();
         localStorage.setItem(STORAGE_KEY, "true");
     }
@@ -2122,11 +2160,30 @@ speciesInput.addEventListener("focus", () => {
             document.getElementById("target-lifelist-inputs").style.display = "none";
         } else if (step.onEnter === "switchToLifelist") {
             targetMode = "lifelist";
+            lifelistSource = "upload";
             document.querySelectorAll(".target-mode-btn").forEach(b => {
                 b.classList.toggle("active", b.dataset.mode === "lifelist");
             });
+            document.querySelectorAll(".lifelist-source-btn").forEach(b => {
+                b.classList.toggle("active", b.dataset.source === "upload");
+            });
             document.getElementById("target-search-inputs").style.display = "none";
             document.getElementById("target-lifelist-inputs").style.display = "";
+            document.getElementById("lifelist-upload-inputs").style.display = "";
+            document.getElementById("lifelist-fresh-inputs").style.display = "none";
+        } else if (step.onEnter === "switchToFresh") {
+            targetMode = "lifelist";
+            lifelistSource = "fresh";
+            document.querySelectorAll(".target-mode-btn").forEach(b => {
+                b.classList.toggle("active", b.dataset.mode === "lifelist");
+            });
+            document.querySelectorAll(".lifelist-source-btn").forEach(b => {
+                b.classList.toggle("active", b.dataset.source === "fresh");
+            });
+            document.getElementById("target-search-inputs").style.display = "none";
+            document.getElementById("target-lifelist-inputs").style.display = "";
+            document.getElementById("lifelist-upload-inputs").style.display = "none";
+            document.getElementById("lifelist-fresh-inputs").style.display = "";
         } else if (step.onEnter === "switchToExplore" && mockResultsActive) {
             if (resultsMode !== "explore") {
                 resultsMode = "explore";
@@ -2163,67 +2220,61 @@ speciesInput.addEventListener("focus", () => {
             return;
         }
 
-        // Scroll target into view — use "center" on mobile so there's room for the bubble
-        target.scrollIntoView({ behavior: "smooth", block: window.innerWidth <= 768 ? "center" : "nearest" });
+        // Highlight target
+        target.classList.add("walkthrough-target-highlight");
+        currentHighlight = target;
 
-        // Delay for scroll to settle before positioning bubble
-        setTimeout(() => {
-            // Highlight target
-            target.classList.add("walkthrough-target-highlight");
-            currentHighlight = target;
+        // Cut out the target from the backdrop
+        const rect = target.getBoundingClientRect();
+        const pad = 8;
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const rx = rect.width / 2 + pad;
+        const ry = rect.height / 2 + pad;
+        backdrop.style.clipPath = `polygon(
+            0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
+            ${cx - rx}px ${cy - ry}px,
+            ${cx - rx}px ${cy + ry}px,
+            ${cx + rx}px ${cy + ry}px,
+            ${cx + rx}px ${cy - ry}px,
+            ${cx - rx}px ${cy - ry}px
+        )`;
 
-            // Cut out the target from the backdrop
-            const rect = target.getBoundingClientRect();
-            const pad = 8;
-            const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
-            const rx = rect.width / 2 + pad;
-            const ry = rect.height / 2 + pad;
-            backdrop.style.clipPath = `polygon(
-                0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
-                ${cx - rx}px ${cy - ry}px,
-                ${cx - rx}px ${cy + ry}px,
-                ${cx + rx}px ${cy + ry}px,
-                ${cx + rx}px ${cy - ry}px,
-                ${cx - rx}px ${cy - ry}px
-            )`;
+        // Position bubble
+        positionBubble(rect, step.prefer);
 
-            // Position bubble
-            positionBubble(rect, step.prefer);
+        // Content
+        titleEl.textContent = step.title;
+        descEl.textContent = step.desc;
 
-            // Content
-            titleEl.textContent = step.title;
-            descEl.textContent = step.desc;
+        // Dots
+        dotsEl.innerHTML = steps.map((_, i) =>
+            `<div class="walkthrough-dot${i === currentStep ? " active" : ""}"></div>`
+        ).join("");
 
-            // Dots
-            dotsEl.innerHTML = steps.map((_, i) =>
-                `<div class="walkthrough-dot${i === currentStep ? " active" : ""}"></div>`
-            ).join("");
+        // Buttons
+        let btns = "";
+        if (currentStep === 0) {
+            btns += `<button class="walkthrough-btn skip" id="wt-skip">Skip</button>`;
+            btns += `<button class="walkthrough-btn primary" id="wt-next">Next</button>`;
+        } else if (currentStep === steps.length - 1) {
+            btns += `<button class="walkthrough-btn secondary" id="wt-prev">Back</button>`;
+            btns += `<button class="walkthrough-btn primary" id="wt-done">Done</button>`;
+        } else {
+            btns += `<button class="walkthrough-btn secondary" id="wt-prev">Back</button>`;
+            btns += `<button class="walkthrough-btn primary" id="wt-next">Next</button>`;
+        }
+        btnsEl.innerHTML = btns;
 
-            // Buttons
-            let btns = "";
-            if (currentStep === 0) {
-                btns += `<button class="walkthrough-btn skip" id="wt-skip">Skip</button>`;
-                btns += `<button class="walkthrough-btn primary" id="wt-next">Next</button>`;
-            } else if (currentStep === steps.length - 1) {
-                btns += `<button class="walkthrough-btn secondary" id="wt-prev">Back</button>`;
-                btns += `<button class="walkthrough-btn primary" id="wt-done">Done</button>`;
-            } else {
-                btns += `<button class="walkthrough-btn secondary" id="wt-prev">Back</button>`;
-                btns += `<button class="walkthrough-btn primary" id="wt-next">Next</button>`;
-            }
-            btnsEl.innerHTML = btns;
-
-            // Wire buttons
-            const skipBtn = document.getElementById("wt-skip");
-            const nextBtn = document.getElementById("wt-next");
-            const prevBtn = document.getElementById("wt-prev");
-            const doneBtn = document.getElementById("wt-done");
-            if (skipBtn) skipBtn.addEventListener("click", endWalkthrough);
-            if (nextBtn) nextBtn.addEventListener("click", () => { currentStep++; showStep(); });
-            if (prevBtn) prevBtn.addEventListener("click", () => { currentStep--; showStep(); });
-            if (doneBtn) doneBtn.addEventListener("click", endWalkthrough);
-        }, 350);
+        // Wire buttons
+        const skipBtn = document.getElementById("wt-skip");
+        const nextBtn = document.getElementById("wt-next");
+        const prevBtn = document.getElementById("wt-prev");
+        const doneBtn = document.getElementById("wt-done");
+        if (skipBtn) skipBtn.addEventListener("click", endWalkthrough);
+        if (nextBtn) nextBtn.addEventListener("click", () => { currentStep++; showStep(); });
+        if (prevBtn) prevBtn.addEventListener("click", () => { currentStep--; showStep(); });
+        if (doneBtn) doneBtn.addEventListener("click", endWalkthrough);
     }
 
     function positionBubble(targetRect, prefer) {
@@ -2281,8 +2332,8 @@ speciesInput.addEventListener("focus", () => {
         bubble.setAttribute("data-arrow", arrow);
     }
 
-    // Click backdrop to dismiss
-    backdrop.addEventListener("click", endWalkthrough);
+    // Close button to dismiss
+    document.getElementById("walkthrough-close").addEventListener("click", endWalkthrough);
 
     // Welcome dialog
     const welcomeOverlay = document.getElementById("walkthrough-welcome-overlay");
