@@ -102,14 +102,18 @@ let lifelistSource = "fresh"; // "upload" or "fresh"
 
 function updateOptimizeBtn() {
     const btn = document.getElementById("optimize-btn");
-    if (searchMode === "driving" && centerLat === null) {
+    if (searchMode === "driving") {
         btn.disabled = true;
+        btn.textContent = "Driving Time search coming soon";
     } else if (targetMode === "search") {
         btn.disabled = !selectedSpecies;
+        btn.textContent = "Find Hotspots";
     } else if (lifelistSource === "fresh") {
         btn.disabled = false;
+        btn.textContent = "Find Hotspots";
     } else {
         btn.disabled = allObservations.length === 0;
+        btn.textContent = "Find Hotspots";
     }
 }
 
