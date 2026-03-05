@@ -177,6 +177,8 @@ def split_world_file(world_file):
     split_dir.mkdir(parents=True, exist_ok=True)
 
     con = duckdb.connect()
+    con.execute("PRAGMA enable_print_progress_bar;")
+    con.execute("PRAGMA progress_bar_time=500;")
     con.execute(f"SET temp_directory = '{TEMP_DIR}';")
     con.execute(f"SET memory_limit = '{MEMORY_LIMIT}';")
     con.execute("SET preserve_insertion_order = false;")
@@ -523,6 +525,8 @@ def main():
             extract_tar(archive_path, RAW_DIR)
         decompress_gz_files(RAW_DIR)
 
+    # split the world file into per-country files for processing
+    log.info("Splitting world file into per-country files...")
     regions = split_world_file(RAW_DIR / f"ebd_{RELEASE}.txt")
 
     # Initialize the new combined DB
