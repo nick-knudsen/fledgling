@@ -168,63 +168,9 @@ def decompress_gz_files(directory):
     for f in extracted:
         size_mb = f.stat().st_size / (1024 ** 2)
         log.info(f"  {f.name} ({size_mb:,.0f} MB)")
+        
 
-
-# ---------------------------------------------------------------------------
-# Detect data structure and prepare per-region files
-# ---------------------------------------------------------------------------
-
-def detect_and_prepare(extract_dir):
-    """Examine extracted files and return a list of (region_code, data_path) tuples.
-
-    Handles two scenarios:
-    - Scenario A: A single world TSV — split by COUNTRY CODE into per-country files
-    - Scenario B: Per-region TSV files already present
-    """
-    extract_dir = Path(extract_dir)
-    all_files = sorted(extract_dir.iterdir())
-
-    # Move sampling files to their permanent home
-    SAMPLING_DIR.mkdir(parents=True, exist_ok=True)
-    for f in list(all_files):
-        if "_sampling" in f.name.lower() and f.suffix.lower() == ".txt":
-            dest = SAMPLING_DIR / f.name
-            shutil.move(str(f), str(dest))
-            log.info(f"  Moved sampling file: {f.name}")
-            all_files.remove(f)
-
-    # Delete non-data files (readmes, pdfs, etc.)
-    data_files = []
-    for f in list(all_files):
-        if f.suffix.lower() == ".txt":
-            data_files.append(f)
-        else:
-            f.unlink()
-            log.info(f"  Deleted non-data file: {f.name}")
-
-    if not data_files:
-        raise RuntimeError(f"No data TSV files found in {extract_dir}")
-
-    # Check for per-region files: ebd_{REGION}_smp_rel*.txt
-    region_pattern = re.compile(r"^ebd_(.+)_smp_rel.+\.txt$", re.IGNORECASE)
-    per_region = {}
-    for f in data_files:
-        m = region_pattern.match(f.name)
-        if m:
-            per_region[m.group(1)] = f
-
-    if len(per_region) > 1:
-        log.info(f"Found {len(per_region)} per-region data files")
-        return sorted(per_region.items())
-
-    # Single file — split by country code
-    world_file = data_files[0]
-    log.info(f"Single world file detected: {world_file.name}")
-    log.info("Splitting by COUNTRY CODE (this may take a while)...")
-    return _split_world_file(world_file)
-
-
-def _split_world_file(world_file):
+def split_world_file(world_file):
     """Split a world TSV into per-country files using DuckDB COPY PARTITION_BY."""
     world_file = Path(world_file)
     split_dir = RAW_DIR / "split"
@@ -548,7 +494,7 @@ def main():
 
     if args.swap_only:
         swap_databases()
-        return
+        return tmux 
 
     if args.sort_only:
         final_sort()
@@ -577,10 +523,7 @@ def main():
             extract_tar(archive_path, RAW_DIR)
         decompress_gz_files(RAW_DIR)
 
-    # Detect structure and get per-region file list
-    log.info("\nDetecting data structure...")
-    regions = detect_and_prepare(RAW_DIR)
-    log.info(f"Found {len(regions)} regions to process")
+    regions = split_world_file(RAW_DIR / f"ebd_{RELEASE}.txt")
 
     # Initialize the new combined DB
     init_combined_db(COMBINED_NEW)
