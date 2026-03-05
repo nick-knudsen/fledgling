@@ -12,9 +12,9 @@ Usage:
 """
 
 import argparse
+import gzip
 import logging
 import os
-import re
 import shutil
 import sys
 import tarfile
@@ -45,7 +45,8 @@ COMBINED_OLD = DATA_DIR / "combined_old.duckdb"
 FAILED_LOG = DATA_DIR / "failed_regions.txt"
 PIPELINE_LOG = DATA_DIR / "pipeline.log"
 
-MEMORY_LIMIT = "2GB"
+DEFAULT_MEMORY_LIMIT = "2GB"
+LARGE_COUNTRY_THRESHOLD = 7 * 1024 * 1024 * 1024  # 7 GB
 
 log = logging.getLogger("ebird_pipeline")
 
@@ -143,7 +144,6 @@ def extract_tar(archive_path, extract_dir):
 
 def decompress_gz_files(directory):
     """Decompress any .gz files in directory. Deletes .gz files when done."""
-    import gzip
     directory = Path(directory)
     gz_files = sorted(directory.glob("*.gz"))
     if not gz_files:
@@ -168,54 +168,89 @@ def decompress_gz_files(directory):
     for f in extracted:
         size_mb = f.stat().st_size / (1024 ** 2)
         log.info(f"  {f.name} ({size_mb:,.0f} MB)")
-        
 
-def split_world_file(world_file):
-    """Split a world TSV into per-country files using DuckDB COPY PARTITION_BY."""
+
+def split_world_file(world_file, split_dir=None):
+    """Split a world TSV into per-country gzip-compressed files.
+
+    Writes compressed .txt.gz files so that the split output (~110 GB) fits
+    alongside the world file (~765 GB) on a 1 TB volume. DuckDB can read
+    .gz files natively via read_csv_auto.
+
+    Tracks uncompressed bytes per country so the caller can decide which
+    countries need subnational subdivision.
+    """
     world_file = Path(world_file)
-    split_dir = RAW_DIR / "split"
+    if split_dir is None:
+        split_dir = RAW_DIR / "split"
+    split_dir = Path(split_dir)
     split_dir.mkdir(parents=True, exist_ok=True)
 
-    con = duckdb.connect()
-    con.execute("PRAGMA enable_print_progress_bar;")
-    con.execute("PRAGMA progress_bar_time=500;")
-    con.execute(f"SET temp_directory = '{TEMP_DIR}';")
-    con.execute(f"SET memory_limit = '{MEMORY_LIMIT}';")
-    con.execute("SET preserve_insertion_order = false;")
+    log.info(f"Splitting {world_file.name} by country (streaming, gzip)...")
+    file_handles = {}
+    country_bytes = {}  # uncompressed bytes per country
+    line_count = 0
+    file_size = world_file.stat().st_size
+    bytes_read = 0
+    last_progress = 0
 
-    con.execute(f"""
-        COPY (
-            SELECT *, "COUNTRY CODE" AS _country
-            FROM read_csv_auto('{world_file}',
-                delim='\t',
-                quote='',
-                types={{
-                    'LATITUDE': 'FLOAT',
-                    'LONGITUDE': 'FLOAT',
-                    'OBSERVATION DATE': 'DATE',
-                    'ALL SPECIES REPORTED': 'BOOLEAN'
-                }})
-        )
-        TO '{split_dir}'
-        (FORMAT CSV, DELIMITER '\t', HEADER, PARTITION_BY (_country))
-    """)
-    con.close()
+    try:
+        with open(world_file, "r", encoding="utf-8") as f:
+            header = f.readline()
+            bytes_read += len(header.encode("utf-8"))
+            columns = header.strip().split("\t")
+            try:
+                country_idx = columns.index("COUNTRY CODE")
+            except ValueError:
+                raise RuntimeError(
+                    f"COUNTRY CODE column not found. Columns: {columns[:10]}..."
+                )
+
+            header_bytes = header.encode("utf-8")
+
+            for line in f:
+                line_bytes = line.encode("utf-8")
+                bytes_read += len(line_bytes)
+                line_count += 1
+                fields = line.split("\t")
+                if len(fields) <= country_idx:
+                    continue
+                country = fields[country_idx]
+
+                if country not in file_handles:
+                    out_path = split_dir / f"{country}.txt.gz"
+                    file_handles[country] = gzip.open(out_path, "wb")
+                    file_handles[country].write(header_bytes)
+                    country_bytes[country] = len(header_bytes)
+                    log.info(f"  New country: {country}")
+
+                file_handles[country].write(line_bytes)
+                country_bytes[country] += len(line_bytes)
+
+                # Log progress every 5%
+                pct = int(bytes_read / file_size * 100)
+                if pct >= last_progress + 5:
+                    last_progress = pct
+                    log.info(
+                        f"  {pct}% ({line_count:,} lines, "
+                        f"{len(file_handles)} countries)"
+                    )
+    finally:
+        for fh in file_handles.values():
+            fh.close()
+
+    log.info(f"Split complete: {line_count:,} lines into {len(file_handles)} countries")
 
     # Delete the world file to reclaim disk space
     world_file.unlink()
     log.info("Deleted world file to reclaim disk space")
 
-    # Collect per-country files from partition directories
+    # Collect per-country files with their uncompressed sizes
     regions = []
-    for country_dir in sorted(split_dir.iterdir()):
-        if country_dir.is_dir():
-            # DuckDB creates dirs like _country=US
-            code = country_dir.name.split("=")[-1]
-            csv_files = list(country_dir.glob("*.csv"))
-            if csv_files:
-                regions.append((code, csv_files[0]))
+    for gz_file in sorted(split_dir.glob("*.txt.gz")):
+        code = gz_file.name.replace(".txt.gz", "")
+        regions.append((code, gz_file, country_bytes.get(code, 0)))
 
-    log.info(f"Split into {len(regions)} countries")
     return regions
 
 
@@ -290,14 +325,14 @@ def record_success(db_path, region_code, stats):
 # Processing
 # ---------------------------------------------------------------------------
 
-def process_region(region_code, data_path):
+def process_region(region_code, data_path, memory_limit):
     """Run the frequency pipeline for one region. Returns stats or None."""
     try:
         stats = fdp.run_pipeline(
             region_code=region_code,
             input_path=str(data_path),
             combined_db_path=str(COMBINED_NEW),
-            memory_limit=MEMORY_LIMIT,
+            memory_limit=memory_limit,
             temp_dir=str(TEMP_DIR),
         )
         return stats
@@ -312,7 +347,55 @@ def log_failure(region_code, reason):
         f.write(f"{region_code}\t{datetime.now().isoformat()}\t{reason}\n")
 
 
-def retry_failed_as_subnational(failed_regions, all_regions_data):
+def _split_by_state_code(data_path, country_code):
+    """Split a country's data file by STATE CODE using line-by-line streaming.
+
+    Works with both plain .txt and .gz compressed files.
+    """
+    split_dir = TEMP_DIR / f"{country_code}_sub"
+    split_dir.mkdir(parents=True, exist_ok=True)
+
+    data_path = Path(data_path)
+    opener = gzip.open if data_path.suffix == ".gz" else open
+    open_kwargs = {"mode": "rt", "encoding": "utf-8"} if data_path.suffix == ".gz" else {"mode": "r", "encoding": "utf-8"}
+
+    file_handles = {}
+    try:
+        with opener(data_path, **open_kwargs) as f:
+            header = f.readline()
+            columns = header.strip().split("\t")
+            try:
+                state_idx = columns.index("STATE CODE")
+            except ValueError:
+                raise RuntimeError(
+                    f"STATE CODE column not found. Columns: {columns[:10]}..."
+                )
+
+            for line in f:
+                fields = line.split("\t")
+                if len(fields) <= state_idx:
+                    continue
+                state = fields[state_idx]
+
+                if state not in file_handles:
+                    out_path = split_dir / f"{state}.txt"
+                    file_handles[state] = open(out_path, "w", encoding="utf-8")
+                    file_handles[state].write(header)
+
+                file_handles[state].write(line)
+    finally:
+        for fh in file_handles.values():
+            fh.close()
+
+    regions = []
+    for txt_file in sorted(split_dir.glob("*.txt")):
+        code = txt_file.stem
+        regions.append((code, txt_file))
+
+    return regions
+
+
+def retry_failed_as_subnational(failed_regions, all_regions_data, memory_limit):
     """For failed countries, attempt to process at subnational level by
     splitting the country's data by STATE CODE into smaller pieces."""
     if not failed_regions:
@@ -322,7 +405,7 @@ def retry_failed_as_subnational(failed_regions, all_regions_data):
 
     for region_code in list(failed_regions):
         data_path = None
-        for code, path in all_regions_data:
+        for code, path, *_ in all_regions_data:
             if code == region_code:
                 data_path = path
                 break
@@ -341,7 +424,7 @@ def retry_failed_as_subnational(failed_regions, all_regions_data):
         all_ok = True
         for sub_code, sub_path in sub_regions:
             log.info(f"  Processing subnational: {sub_code}")
-            stats = process_region(sub_code, sub_path)
+            stats = process_region(sub_code, sub_path, memory_limit)
             if stats:
                 record_success(COMBINED_NEW, sub_code, stats)
                 log.info(f"    {sub_code}: {stats['hotspots']} hotspots, {stats['wilson_rows']:,} wilson rows")
@@ -350,58 +433,57 @@ def retry_failed_as_subnational(failed_regions, all_regions_data):
                 log_failure(sub_code, "subnational_pipeline_failed")
             Path(sub_path).unlink(missing_ok=True)
 
+        # Clean up the subnational split directory
+        sub_dir = TEMP_DIR / f"{region_code}_sub"
+        if sub_dir.exists():
+            shutil.rmtree(sub_dir)
+
         if all_ok:
             failed_regions.discard(region_code)
 
 
-def _split_by_state_code(data_path, country_code):
-    """Split a country's data file by STATE CODE into per-subnational files."""
-    split_dir = TEMP_DIR / f"{country_code}_sub"
-    split_dir.mkdir(parents=True, exist_ok=True)
+def process_large_country(code, data_path, memory_limit):
+    """Split a large country by STATE CODE and process each subnational region."""
+    log.info(f"  {code} exceeds {LARGE_COUNTRY_THRESHOLD / (1024**3):.0f} GB, splitting by STATE CODE...")
+    try:
+        sub_regions = _split_by_state_code(data_path, code)
+    except Exception as e:
+        log.error(f"  Failed to split {code}: {e}")
+        return None
 
-    con = duckdb.connect()
-    con.execute(f"SET temp_directory = '{TEMP_DIR}';")
-    con.execute(f"SET memory_limit = '{MEMORY_LIMIT}';")
+    all_stats = {"hotspots": 0, "wilson_rows": 0}
+    all_ok = True
+    for sub_code, sub_path in sub_regions:
+        log.info(f"    Processing subnational: {sub_code}")
+        stats = process_region(sub_code, sub_path, memory_limit)
+        if stats:
+            record_success(COMBINED_NEW, sub_code, stats)
+            all_stats["hotspots"] += stats["hotspots"]
+            all_stats["wilson_rows"] += stats["wilson_rows"]
+            log.info(f"      {sub_code}: {stats['hotspots']} hotspots, {stats['wilson_rows']:,} wilson rows")
+        else:
+            all_ok = False
+            log_failure(sub_code, "subnational_pipeline_failed")
+        Path(sub_path).unlink(missing_ok=True)
 
-    con.execute(f"""
-        COPY (
-            SELECT *, "STATE CODE" AS _state
-            FROM read_csv_auto('{data_path}',
-                delim='\t',
-                quote='',
-                types={{
-                    'LATITUDE': 'FLOAT',
-                    'LONGITUDE': 'FLOAT',
-                    'OBSERVATION DATE': 'DATE',
-                    'ALL SPECIES REPORTED': 'BOOLEAN'
-                }})
-        )
-        TO '{split_dir}'
-        (FORMAT CSV, DELIMITER '\t', HEADER, PARTITION_BY (_state))
-    """)
-    con.close()
+    # Clean up the subnational split directory
+    sub_dir = TEMP_DIR / f"{code}_sub"
+    if sub_dir.exists():
+        shutil.rmtree(sub_dir)
 
-    regions = []
-    for state_dir in sorted(split_dir.iterdir()):
-        if state_dir.is_dir():
-            code = state_dir.name.split("=")[-1]
-            files = list(state_dir.glob("*.csv"))
-            if files:
-                regions.append((code, files[0]))
-
-    return regions
+    return all_stats if all_ok else None
 
 
 # ---------------------------------------------------------------------------
 # Final sort + swap
 # ---------------------------------------------------------------------------
 
-def final_sort():
+def final_sort(memory_limit):
     """Sort rolling_wilson_score by (day_of_year, locality_id) for query performance."""
     log.info("Sorting rolling_wilson_score (this may take a while)...")
     con = duckdb.connect(str(COMBINED_NEW))
     con.execute(f"SET temp_directory = '{TEMP_DIR}';")
-    con.execute(f"SET memory_limit = '{MEMORY_LIMIT}';")
+    con.execute(f"SET memory_limit = '{memory_limit}';")
     con.execute("PRAGMA enable_print_progress_bar;")
     con.execute("PRAGMA progress_bar_time=500;")
     con.execute("""
@@ -468,8 +550,6 @@ def swap_databases():
 # ---------------------------------------------------------------------------
 
 def main():
-    global MEMORY_LIMIT
-
     parser = argparse.ArgumentParser(description="Automated eBird world data pipeline")
     parser.add_argument("--skip-download", action="store_true",
                         help="Skip download, but still extract and process")
@@ -479,9 +559,11 @@ def main():
                         help="Only swap combined_new.duckdb -> combined.duckdb")
     parser.add_argument("--sort-only", action="store_true",
                         help="Only run the final sort on combined_new.duckdb")
-    parser.add_argument("--memory", default=MEMORY_LIMIT,
-                        help=f"DuckDB memory limit (default: {MEMORY_LIMIT})")
+    parser.add_argument("--memory", default=DEFAULT_MEMORY_LIMIT,
+                        help=f"DuckDB memory limit (default: {DEFAULT_MEMORY_LIMIT})")
     args = parser.parse_args()
+
+    memory_limit = args.memory
 
     logging.basicConfig(
         level=logging.INFO,
@@ -492,14 +574,12 @@ def main():
         ],
     )
 
-    MEMORY_LIMIT = args.memory
-
     if args.swap_only:
         swap_databases()
-        return tmux 
+        return
 
     if args.sort_only:
-        final_sort()
+        final_sort(memory_limit)
         copy_species_table()
         return
 
@@ -525,14 +605,15 @@ def main():
             extract_tar(archive_path, RAW_DIR)
         decompress_gz_files(RAW_DIR)
 
-    # split the world file into per-country files for processing
+    # Split the world file into per-country compressed files
     log.info("Splitting world file into per-country files...")
     regions = split_world_file(RAW_DIR / f"ebd_{RELEASE}.txt")
 
     # Initialize the new combined DB
     init_combined_db(COMBINED_NEW)
     already_done = get_processed_regions(COMBINED_NEW)
-    to_process = [(code, path) for code, path in regions if code not in already_done]
+    to_process = [(code, path, size) for code, path, size in regions
+                  if code not in already_done]
 
     log.info(f"Already processed: {len(already_done)}")
     log.info(f"Remaining: {len(to_process)}")
@@ -542,17 +623,23 @@ def main():
         failed_set = set()
         total_start = time.time()
 
-        for i, (code, data_path) in enumerate(to_process, 1):
-            log.info(f"\n[{i}/{len(to_process)}] Processing {code}...")
+        for i, (code, data_path, uncompressed_size) in enumerate(to_process, 1):
+            log.info(f"\n[{i}/{len(to_process)}] Processing {code} "
+                     f"({uncompressed_size / (1024**3):.1f} GB uncompressed)...")
             start = time.time()
 
-            stats = process_region(code, data_path)
+            if uncompressed_size > LARGE_COUNTRY_THRESHOLD:
+                stats = process_large_country(code, data_path, memory_limit)
+            else:
+                stats = process_region(code, data_path, memory_limit)
+
             elapsed = time.time() - start
             minutes = int(elapsed // 60)
             seconds = int(elapsed % 60)
 
             if stats:
-                record_success(COMBINED_NEW, code, stats)
+                if uncompressed_size <= LARGE_COUNTRY_THRESHOLD:
+                    record_success(COMBINED_NEW, code, stats)
                 succeeded.append(code)
                 log.info(
                     f"  {code}: {stats['hotspots']} hotspots, "
@@ -566,7 +653,7 @@ def main():
                 log.error(f"  {code}: FAILED ({minutes}m {seconds}s)")
 
         # Retry failed countries at subnational level
-        retry_failed_as_subnational(failed_set, regions)
+        retry_failed_as_subnational(failed_set, regions, memory_limit)
 
         total_elapsed = time.time() - total_start
         log.info(f"\nProcessing complete in {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s")
@@ -579,7 +666,7 @@ def main():
         log.info("All regions already processed.")
 
     # Final sort and species table
-    final_sort()
+    final_sort(memory_limit)
     copy_species_table()
 
     log.info(f"\nNew database ready at {COMBINED_NEW}")
