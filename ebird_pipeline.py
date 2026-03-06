@@ -347,12 +347,13 @@ def log_failure(region_code, reason):
         f.write(f"{region_code}\t{datetime.now().isoformat()}\t{reason}\n")
 
 
-def _split_by_state_code(data_path, country_code):
-    """Split a country's data file by STATE CODE using line-by-line streaming.
+def _split_by_column(data_path, column_name, split_dir):
+    """Split a data file by a column using line-by-line streaming.
 
     Works with both plain .txt and .gz compressed files.
+    Returns list of (code, path, uncompressed_bytes) tuples.
     """
-    split_dir = TEMP_DIR / f"{country_code}_sub"
+    split_dir = Path(split_dir)
     split_dir.mkdir(parents=True, exist_ok=True)
 
     data_path = Path(data_path)
@@ -360,29 +361,33 @@ def _split_by_state_code(data_path, country_code):
     open_kwargs = {"mode": "rt", "encoding": "utf-8"} if data_path.suffix == ".gz" else {"mode": "r", "encoding": "utf-8"}
 
     file_handles = {}
+    region_bytes = {}
     try:
         with opener(data_path, **open_kwargs) as f:
             header = f.readline()
+            header_bytes = len(header.encode("utf-8"))
             columns = header.strip().split("\t")
             try:
-                state_idx = columns.index("STATE CODE")
+                col_idx = columns.index(column_name)
             except ValueError:
                 raise RuntimeError(
-                    f"STATE CODE column not found. Columns: {columns[:10]}..."
+                    f"{column_name} column not found. Columns: {columns[:10]}..."
                 )
 
             for line in f:
                 fields = line.split("\t")
-                if len(fields) <= state_idx:
+                if len(fields) <= col_idx:
                     continue
-                state = fields[state_idx]
+                value = fields[col_idx]
 
-                if state not in file_handles:
-                    out_path = split_dir / f"{state}.txt"
-                    file_handles[state] = open(out_path, "w", encoding="utf-8")
-                    file_handles[state].write(header)
+                if value not in file_handles:
+                    out_path = split_dir / f"{value}.txt"
+                    file_handles[value] = open(out_path, "w", encoding="utf-8")
+                    file_handles[value].write(header)
+                    region_bytes[value] = header_bytes
 
-                file_handles[state].write(line)
+                file_handles[value].write(line)
+                region_bytes[value] += len(line.encode("utf-8"))
     finally:
         for fh in file_handles.values():
             fh.close()
@@ -390,88 +395,90 @@ def _split_by_state_code(data_path, country_code):
     regions = []
     for txt_file in sorted(split_dir.glob("*.txt")):
         code = txt_file.stem
-        regions.append((code, txt_file))
+        regions.append((code, txt_file, region_bytes.get(code, 0)))
 
     return regions
 
 
-def retry_failed_as_subnational(failed_regions, all_regions_data, memory_limit):
-    """For failed countries, attempt to process at subnational level by
-    splitting the country's data by STATE CODE into smaller pieces."""
-    if not failed_regions:
-        return
+def _process_subregions(sub_regions, memory_limit, split_column=None):
+    """Process a list of (code, path, size) sub-regions. If any sub-region
+    exceeds LARGE_COUNTRY_THRESHOLD and a split_column is provided, split it
+    further before processing. Skips already-processed regions for resume.
+    """
+    already_done = get_processed_regions(COMBINED_NEW)
+    all_stats = {"hotspots": 0, "wilson_rows": 0}
+    all_ok = True
 
-    log.info(f"\nRetrying {len(failed_regions)} failed regions at subnational level...")
-
-    for region_code in list(failed_regions):
-        data_path = None
-        for code, path, *_ in all_regions_data:
-            if code == region_code:
-                data_path = path
-                break
-
-        if data_path is None or not os.path.exists(data_path):
-            log.warning(f"  {region_code}: data file no longer exists, skipping")
+    for sub_code, sub_path, sub_size in sub_regions:
+        if sub_code in already_done:
+            log.info(f"    {sub_code}: already processed, skipping")
+            Path(sub_path).unlink(missing_ok=True)
             continue
 
-        log.info(f"  Splitting {region_code} by STATE CODE...")
-        try:
-            sub_regions = _split_by_state_code(data_path, region_code)
-        except Exception as e:
-            log.error(f"  Failed to split {region_code}: {e}")
-            continue
+        if sub_size > LARGE_COUNTRY_THRESHOLD and split_column:
+            log.info(f"    {sub_code} exceeds "
+                     f"{LARGE_COUNTRY_THRESHOLD / (1024**3):.0f} GB, "
+                     f"splitting by {split_column}...")
+            try:
+                subsub_dir = TEMP_DIR / f"{sub_code}_sub"
+                subsub_regions = _split_by_column(sub_path, split_column,
+                                                  subsub_dir)
+            except Exception as e:
+                log.error(f"    Failed to split {sub_code}: {e}")
+                all_ok = False
+                log_failure(sub_code, f"split_by_{split_column}_failed")
+                continue
 
-        all_ok = True
-        for sub_code, sub_path in sub_regions:
-            log.info(f"  Processing subnational: {sub_code}")
+            Path(sub_path).unlink(missing_ok=True)
+            # Recurse with no further splitting
+            child_stats = _process_subregions(
+                subsub_regions, memory_limit, split_column=None,
+            )
+            if subsub_dir.exists():
+                shutil.rmtree(subsub_dir)
+            if child_stats:
+                all_stats["hotspots"] += child_stats["hotspots"]
+                all_stats["wilson_rows"] += child_stats["wilson_rows"]
+            else:
+                all_ok = False
+        else:
+            log.info(f"    Processing: {sub_code} "
+                     f"({sub_size / (1024**3):.1f} GB)")
             stats = process_region(sub_code, sub_path, memory_limit)
             if stats:
                 record_success(COMBINED_NEW, sub_code, stats)
-                log.info(f"    {sub_code}: {stats['hotspots']} hotspots, {stats['wilson_rows']:,} wilson rows")
+                all_stats["hotspots"] += stats["hotspots"]
+                all_stats["wilson_rows"] += stats["wilson_rows"]
+                log.info(f"      {sub_code}: {stats['hotspots']} hotspots, "
+                         f"{stats['wilson_rows']:,} wilson rows")
             else:
                 all_ok = False
-                log_failure(sub_code, "subnational_pipeline_failed")
+                log_failure(sub_code, "pipeline_failed")
             Path(sub_path).unlink(missing_ok=True)
 
-        # Clean up the subnational split directory
-        sub_dir = TEMP_DIR / f"{region_code}_sub"
-        if sub_dir.exists():
-            shutil.rmtree(sub_dir)
-
-        if all_ok:
-            failed_regions.discard(region_code)
+    return all_stats if all_ok else None
 
 
 def process_large_country(code, data_path, memory_limit):
-    """Split a large country by STATE CODE and process each subnational region."""
-    log.info(f"  {code} exceeds {LARGE_COUNTRY_THRESHOLD / (1024**3):.0f} GB, splitting by STATE CODE...")
+    """Split a large country by STATE CODE, then further by COUNTY CODE
+    if any state still exceeds the size threshold."""
+    log.info(f"  {code} exceeds {LARGE_COUNTRY_THRESHOLD / (1024**3):.0f} GB, "
+             f"splitting by STATE CODE...")
+    split_dir = TEMP_DIR / f"{code}_sub"
     try:
-        sub_regions = _split_by_state_code(data_path, code)
+        sub_regions = _split_by_column(data_path, "STATE CODE", split_dir)
     except Exception as e:
         log.error(f"  Failed to split {code}: {e}")
         return None
 
-    all_stats = {"hotspots": 0, "wilson_rows": 0}
-    all_ok = True
-    for sub_code, sub_path in sub_regions:
-        log.info(f"    Processing subnational: {sub_code}")
-        stats = process_region(sub_code, sub_path, memory_limit)
-        if stats:
-            record_success(COMBINED_NEW, sub_code, stats)
-            all_stats["hotspots"] += stats["hotspots"]
-            all_stats["wilson_rows"] += stats["wilson_rows"]
-            log.info(f"      {sub_code}: {stats['hotspots']} hotspots, {stats['wilson_rows']:,} wilson rows")
-        else:
-            all_ok = False
-            log_failure(sub_code, "subnational_pipeline_failed")
-        Path(sub_path).unlink(missing_ok=True)
+    result = _process_subregions(
+        sub_regions, memory_limit, split_column="COUNTY CODE",
+    )
 
-    # Clean up the subnational split directory
-    sub_dir = TEMP_DIR / f"{code}_sub"
-    if sub_dir.exists():
-        shutil.rmtree(sub_dir)
+    if split_dir.exists():
+        shutil.rmtree(split_dir)
 
-    return all_stats if all_ok else None
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -559,6 +566,8 @@ def main():
                         help="Only swap combined_new.duckdb -> combined.duckdb")
     parser.add_argument("--sort-only", action="store_true",
                         help="Only run the final sort on combined_new.duckdb")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Show what regions would be processed, then exit")
     parser.add_argument("--memory", default=DEFAULT_MEMORY_LIMIT,
                         help=f"DuckDB memory limit (default: {DEFAULT_MEMORY_LIMIT})")
     args = parser.parse_args()
@@ -618,6 +627,13 @@ def main():
     log.info(f"Already processed: {len(already_done)}")
     log.info(f"Remaining: {len(to_process)}")
 
+    if args.dry_run:
+        for code, path, size in to_process:
+            label = "SPLIT" if size > LARGE_COUNTRY_THRESHOLD else "process"
+            log.info(f"  [{label}] {code} ({size / (1024**3):.1f} GB)")
+        log.info(f"\n{len(to_process)} regions would be processed.")
+        return
+
     if to_process:
         succeeded = []
         failed_set = set()
@@ -651,9 +667,6 @@ def main():
                 failed_set.add(code)
                 log_failure(code, "pipeline_failed")
                 log.error(f"  {code}: FAILED ({minutes}m {seconds}s)")
-
-        # Retry failed countries at subnational level
-        retry_failed_as_subnational(failed_set, regions, memory_limit)
 
         total_elapsed = time.time() - total_start
         log.info(f"\nProcessing complete in {int(total_elapsed // 60)}m {int(total_elapsed % 60)}s")
