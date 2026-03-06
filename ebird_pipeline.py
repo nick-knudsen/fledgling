@@ -614,9 +614,26 @@ def main():
             extract_tar(archive_path, RAW_DIR)
         decompress_gz_files(RAW_DIR)
 
-    # Split the world file into per-country compressed files
-    log.info("Splitting world file into per-country files...")
-    regions = split_world_file(RAW_DIR / f"ebd_{RELEASE}.txt")
+    # Use existing split files if available, otherwise split the world file
+    split_dir = RAW_DIR / "split"
+    world_file = RAW_DIR / f"ebd_{RELEASE}.txt"
+    existing_splits = sorted(split_dir.glob("*.txt.gz")) if split_dir.exists() else []
+
+    if existing_splits:
+        log.info(f"Found {len(existing_splits)} existing split files in {split_dir}")
+        regions = []
+        for gz_file in existing_splits:
+            code = gz_file.name.replace(".txt.gz", "")
+            # Estimate uncompressed size from compressed size * 7
+            estimated_size = gz_file.stat().st_size * 7
+            regions.append((code, gz_file, estimated_size))
+    elif world_file.exists():
+        log.info("Splitting world file into per-country files...")
+        regions = split_world_file(world_file)
+    else:
+        log.error(f"No world file ({world_file}) or split files ({split_dir}) found.")
+        log.error("Run without --skip-extract to download and extract first.")
+        sys.exit(1)
 
     # Initialize the new combined DB
     init_combined_db(COMBINED_NEW)
