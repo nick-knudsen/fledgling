@@ -577,11 +577,11 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
         border-right: none; border-bottom: 1px solid var(--border);
         padding: 1rem;
         gap: 1rem;
-        overflow: hidden; transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+        overflow: visible; transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
     }
     .sidebar.collapsed {
         max-height: 0; padding-top: 0; padding-bottom: 0;
-        border-bottom: none; opacity: 0;
+        border-bottom: none; opacity: 0; overflow: hidden;
     }
     .sidebar-toggle {
         display: flex; align-items: center; gap: 0.4rem;
