@@ -489,7 +489,6 @@ function searchRegions(query, index) {
         let score;
         if (name === q) score = -1;
         else if (name.startsWith(q)) score = 0;
-        else if (name.includes(q)) score = 1;
         else continue;
         results.push({ ...item, score });
     }
