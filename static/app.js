@@ -1083,6 +1083,7 @@ document.getElementById("optimize-btn").addEventListener("click", async () => {
 });
 
 async function runOptimization() {
+    resultsMode = "explore";
     const btn = document.getElementById("optimize-btn");
     btn.disabled = true;
     btn.textContent = "Optimizing...";
