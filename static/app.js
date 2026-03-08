@@ -210,6 +210,7 @@ let nominatimTimeout = null;
 let activeLocationIndex = -1;
 
 let searchAreas = {}; // country -> { state -> [counties] }
+let areaRegionIndex = null;
 let selectedCountries = new Set();
 let selectedStates = new Set();
 let selectedCounties = new Set();
@@ -218,6 +219,7 @@ fetch("/api/search-areas")
     .then(r => r.json())
     .then(data => {
         searchAreas = data;
+        areaRegionIndex = buildRegionIndex(data, regionNames);
         populateMultiSelect("country", Object.keys(data).sort(), selectedCountries, onCountryChange);
         refreshStateDropdown();
         refreshCountyDropdown();
@@ -400,6 +402,240 @@ document.addEventListener("click", (e) => {
         }
     }
 });
+
+// ── Region search (convenience navigation for dropdowns) ─────────────
+let scopeRegionIndex = null;
+let areaRegionSearchTimeout = null;
+let scopeRegionSearchTimeout = null;
+let activeAreaRegionIndex = -1;
+let activeScopeRegionIndex = -1;
+
+function buildRegionIndex(areas, names) {
+    const index = [];
+    for (const [countryCode, states] of Object.entries(areas)) {
+        const countryName = names[countryCode] || countryCode;
+        index.push({ level: "country", code: countryCode, name: countryName });
+        for (const [stateCode, counties] of Object.entries(states)) {
+            const stateName = names[stateCode] || stateCode;
+            index.push({ level: "state", code: stateCode, name: stateName, countryCode, countryName });
+            for (const county of counties) {
+                if (!county) continue;
+                index.push({ level: "county", name: county, stateCode, stateName, countryCode, countryName });
+            }
+        }
+    }
+    return index;
+}
+
+function buildScopeRegionIndex() {
+    const countries = new Set();
+    const states = new Set();
+    const countySet = new Set();
+    for (const obs of allObservations) {
+        if (obs.countryCode) countries.add(obs.countryCode);
+        if (obs.state) states.add(obs.state);
+        if (obs.county && obs.state) countySet.add(`${obs.state}|${obs.county}`);
+    }
+    const index = [];
+    for (const code of countries) {
+        index.push({ level: "country", code, name: regionNames[code] || code });
+    }
+    for (const code of states) {
+        const countryCode = code.split("-")[0];
+        index.push({ level: "state", code, name: regionNames[code] || code, countryCode, countryName: regionNames[countryCode] || countryCode });
+    }
+    for (const key of countySet) {
+        const [stateCode, county] = key.split("|");
+        const countryCode = stateCode.split("-")[0];
+        index.push({ level: "county", name: county, stateCode, stateName: regionNames[stateCode] || stateCode, countryCode, countryName: regionNames[countryCode] || countryCode });
+    }
+    return index;
+}
+
+function searchRegions(query, index) {
+    const q = query.toLowerCase().trim();
+    if (!q || !index) return [];
+    const results = [];
+    for (const item of index) {
+        const name = item.name.toLowerCase();
+        let score;
+        if (name === q) score = -1;
+        else if (name.startsWith(q)) score = 0;
+        else if (name.includes(q)) score = 1;
+        else continue;
+        results.push({ ...item, score });
+    }
+    results.sort((a, b) => {
+        if (a.score !== b.score) return a.score - b.score;
+        const lo = { country: 0, state: 1, county: 2 };
+        if (lo[a.level] !== lo[b.level]) return lo[a.level] - lo[b.level];
+        return a.name.localeCompare(b.name);
+    });
+    return results.slice(0, 10);
+}
+
+function regionSearchContext(r) {
+    if (r.level === "county") return r.stateName || r.stateCode || "";
+    if (r.level === "state") return r.countryName || r.countryCode || "";
+    return "";
+}
+
+function renderRegionDropdown(dropdown, results, onSelect) {
+    dropdown.innerHTML = "";
+    if (results.length === 0) { dropdown.classList.remove("open"); return; }
+    results.forEach(r => {
+        const item = document.createElement("div");
+        item.className = "region-search-item";
+        const ctx = regionSearchContext(r);
+        const levelLabel = r.level.charAt(0).toUpperCase() + r.level.slice(1);
+        item.innerHTML = `<span>${r.name}${ctx ? `<span class="region-context">${ctx}</span>` : ""}</span><span class="region-level">${levelLabel}</span>`;
+        item.addEventListener("mousedown", (e) => { e.preventDefault(); onSelect(r); });
+        dropdown.appendChild(item);
+    });
+    dropdown.classList.add("open");
+}
+
+function setupRegionSearchKeys(input, dropdown, getActiveIndex, setActiveIndex, onEnterImmediate) {
+    input.addEventListener("keydown", (e) => {
+        const items = dropdown.querySelectorAll(".region-search-item");
+        let idx = getActiveIndex();
+        if (e.key === "ArrowDown" && items.length) {
+            e.preventDefault();
+            idx = Math.min(idx + 1, items.length - 1);
+            setActiveIndex(idx);
+            items.forEach((el, i) => el.classList.toggle("active", i === idx));
+            items[idx].scrollIntoView({ block: "nearest" });
+        } else if (e.key === "ArrowUp" && items.length) {
+            e.preventDefault();
+            idx = Math.max(idx - 1, 0);
+            setActiveIndex(idx);
+            items.forEach((el, i) => el.classList.toggle("active", i === idx));
+            items[idx].scrollIntoView({ block: "nearest" });
+        } else if (e.key === "Enter") {
+            e.preventDefault();
+            if (items.length) {
+                const target = idx >= 0 ? idx : 0;
+                items[target].dispatchEvent(new MouseEvent("mousedown"));
+            } else if (input.value.trim()) {
+                onEnterImmediate(input.value.trim());
+            }
+        }
+    });
+}
+
+// Area region search
+const areaSearchInput = document.getElementById("area-search-input");
+const areaSearchDropdown = document.getElementById("area-search-dropdown");
+
+areaSearchInput.addEventListener("input", () => {
+    const q = areaSearchInput.value.trim();
+    if (q.length < 1) { areaSearchDropdown.classList.remove("open"); return; }
+    clearTimeout(areaRegionSearchTimeout);
+    areaRegionSearchTimeout = setTimeout(() => {
+        if (!areaSearchInput.value.trim()) { areaSearchDropdown.classList.remove("open"); return; }
+        activeAreaRegionIndex = -1;
+        renderRegionDropdown(areaSearchDropdown, searchRegions(q, areaRegionIndex), (r) => {
+            selectAreaRegion(r);
+            areaSearchInput.value = "";
+            areaSearchDropdown.classList.remove("open");
+        });
+    }, 150);
+});
+
+areaSearchInput.addEventListener("blur", () => {
+    setTimeout(() => areaSearchDropdown.classList.remove("open"), 150);
+});
+
+setupRegionSearchKeys(areaSearchInput, areaSearchDropdown,
+    () => activeAreaRegionIndex, (v) => { activeAreaRegionIndex = v; },
+    (q) => {
+        const results = searchRegions(q, areaRegionIndex);
+        if (results.length) { selectAreaRegion(results[0]); areaSearchInput.value = ""; areaSearchDropdown.classList.remove("open"); }
+    });
+
+function selectAreaRegion(region) {
+    if (region.level === "country") {
+        selectedCountries.add(region.code);
+        selectedStates.clear();
+        selectedCounties.clear();
+    } else if (region.level === "state") {
+        if (selectedCountries.size > 0 && !selectedCountries.has(region.countryCode)) {
+            selectedCountries.clear();
+        }
+        selectedStates.add(region.code);
+        selectedCounties.clear();
+    } else if (region.level === "county") {
+        if (selectedCountries.size > 0 && !selectedCountries.has(region.countryCode)) {
+            selectedCountries.clear();
+        }
+        if (selectedStates.size > 0 && !selectedStates.has(region.stateCode)) {
+            selectedStates.clear();
+        }
+        selectedCounties.add(`${region.stateCode}|${region.name}`);
+    }
+    populateMultiSelect("country", Object.keys(searchAreas).sort(), selectedCountries, onCountryChange);
+    updateMultiSelectDisplay("country", selectedCountries, "World (all countries)");
+    refreshStateDropdown();
+    refreshCountyDropdown();
+}
+
+// Scope region search
+const scopeSearchInput = document.getElementById("scope-search-input");
+const scopeSearchDropdown = document.getElementById("scope-search-dropdown");
+
+scopeSearchInput.addEventListener("input", () => {
+    const q = scopeSearchInput.value.trim();
+    if (q.length < 1) { scopeSearchDropdown.classList.remove("open"); return; }
+    clearTimeout(scopeRegionSearchTimeout);
+    scopeRegionSearchTimeout = setTimeout(() => {
+        if (!scopeSearchInput.value.trim()) { scopeSearchDropdown.classList.remove("open"); return; }
+        activeScopeRegionIndex = -1;
+        renderRegionDropdown(scopeSearchDropdown, searchRegions(q, scopeRegionIndex), (r) => {
+            selectScopeRegion(r);
+            scopeSearchInput.value = "";
+            scopeSearchDropdown.classList.remove("open");
+        });
+    }, 150);
+});
+
+scopeSearchInput.addEventListener("blur", () => {
+    setTimeout(() => scopeSearchDropdown.classList.remove("open"), 150);
+});
+
+setupRegionSearchKeys(scopeSearchInput, scopeSearchDropdown,
+    () => activeScopeRegionIndex, (v) => { activeScopeRegionIndex = v; },
+    (q) => {
+        const results = searchRegions(q, scopeRegionIndex);
+        if (results.length) { selectScopeRegion(results[0]); scopeSearchInput.value = ""; scopeSearchDropdown.classList.remove("open"); }
+    });
+
+function selectScopeRegion(region) {
+    const countrySel = document.getElementById("scope-country");
+    const stateSel = document.getElementById("scope-state");
+    const countySel = document.getElementById("scope-county");
+
+    // Clear and rebuild so parent options exist before setting child values
+    countrySel.value = "";
+    stateSel.value = "";
+    countySel.value = "";
+    populateScopeDropdowns();
+
+    if (region.level === "country") {
+        countrySel.value = region.code;
+    } else if (region.level === "state") {
+        countrySel.value = region.countryCode || "";
+        populateScopeDropdowns();
+        stateSel.value = region.code;
+    } else if (region.level === "county") {
+        countrySel.value = region.countryCode || "";
+        populateScopeDropdowns();
+        stateSel.value = region.stateCode || "";
+        populateScopeDropdowns();
+        countySel.value = region.name;
+    }
+    populateScopeDropdowns();
+    updateLifeList();
+}
 
 // Search mode toggle (region / driving)
 document.querySelectorAll(".search-mode-btn").forEach(btn => {
@@ -615,6 +851,7 @@ document.getElementById("csv-input").addEventListener("change", e => {
                             return;
                         }
                         populateScopeDropdowns();
+                        scopeRegionIndex = buildScopeRegionIndex();
                         updateLifeList();
                         updateOptimizeBtn();
                     }

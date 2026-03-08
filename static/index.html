@@ -54,6 +54,10 @@
                             <button class="list-type-btn active" data-type="life">Life</button>
                             <button class="list-type-btn" data-type="year">Year</button>
                         </div>
+                        <div class="region-search" style="margin-top: 0.4rem;">
+                            <input type="text" id="scope-search-input" placeholder="Search regions..." autocomplete="off" />
+                            <div class="region-search-dropdown" id="scope-search-dropdown"></div>
+                        </div>
                         <select id="scope-country" disabled style="margin-top: 0.4rem;">
                             <option value="">World (all countries)</option>
                         </select>
@@ -77,7 +81,11 @@
                     <button class="search-mode-btn" data-mode="driving">Driving Time</button>
                 </div>
                 <div id="region-inputs">
-                    <div class="multi-select" id="country-select">
+                    <div class="region-search">
+                        <input type="text" id="area-search-input" placeholder="Search regions..." autocomplete="off" />
+                        <div class="region-search-dropdown" id="area-search-dropdown"></div>
+                    </div>
+                    <div class="multi-select" id="country-select" style="margin-top: 0.4rem;">
                         <div class="multi-select-display" id="country-display">World (all countries)</div>
                         <div class="multi-select-dropdown" id="country-dropdown"></div>
                     </div>

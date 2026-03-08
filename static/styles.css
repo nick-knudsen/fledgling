@@ -374,6 +374,29 @@ td { padding: 0.4rem 0; border-bottom: 1px solid var(--border-light); }
     color: var(--text-secondary); font-style: italic; font-size: 0.8rem;
     margin-left: 0.35rem;
 }
+/* Region search */
+.region-search { position: relative; }
+.region-search-dropdown {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--bg-surface); border: 1px solid var(--input-border);
+    border-radius: 6px; margin-top: 2px; max-height: 14rem; overflow-y: auto;
+    z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.region-search-dropdown.open { display: block; }
+.region-search-item {
+    padding: 0.45rem 0.75rem; cursor: pointer; font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.region-search-item:hover, .region-search-item.active { background: var(--hover); }
+.region-search-item .region-context {
+    color: var(--text-secondary); font-size: 0.75rem; margin-left: 0.5rem;
+}
+.region-search-item .region-level {
+    font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 0.1rem 0.35rem; border-radius: 3px; font-weight: 600;
+    background: var(--border); color: var(--text-secondary); flex-shrink: 0; margin-left: 0.5rem;
+}
+
 /* Hotspot search in Plan tab */
 .hotspot-search { position: relative; margin-bottom: 1rem; }
 .hotspot-search input {
