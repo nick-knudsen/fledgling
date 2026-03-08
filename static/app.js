@@ -255,7 +255,7 @@ function getVisibleCounties() {
         for (const [st, cts] of Object.entries(searchAreas[c])) {
             if (states && !states.includes(st)) continue;
             for (const county of cts) {
-                counties.push(`${st}|${county}`);
+                if (county != null) counties.push(`${st}|${county}`);
             }
         }
     }
@@ -263,26 +263,42 @@ function getVisibleCounties() {
 }
 
 function refreshStateDropdown() {
+    const container = document.getElementById("state-select");
     if (selectedCountries.size === 0) {
+        container.style.display = "none";
         populateMultiSelect("state", [], selectedStates, onStateChange);
-        updateMultiSelectDisplay("state", selectedStates, "Select a country first");
     } else {
-        populateMultiSelect("state", getVisibleStates(), selectedStates, onStateChange);
-        updateMultiSelectDisplay("state", selectedStates, "All states/provinces");
+        const states = getVisibleStates();
+        if (states.length <= 1) {
+            container.style.display = "none";
+            selectedStates.clear();
+            if (states.length === 1) selectedStates.add(states[0]);
+            populateMultiSelect("state", [], selectedStates, onStateChange);
+        } else {
+            container.style.display = "";
+            populateMultiSelect("state", states, selectedStates, onStateChange);
+            updateMultiSelectDisplay("state", selectedStates, "All states/provinces");
+        }
     }
 }
 
 function refreshCountyDropdown() {
+    const container = document.getElementById("county-select");
     if (selectedStates.size === 0) {
-        populateMultiSelect("county", [], selectedCounties, () => {
-            updateMultiSelectDisplay("county", selectedCounties, "All counties");
-        });
-        updateMultiSelectDisplay("county", selectedCounties, "Select a state first");
+        container.style.display = "none";
+        populateMultiSelect("county", [], selectedCounties, () => {});
     } else {
-        populateMultiSelect("county", getVisibleCounties(), selectedCounties, () => {
+        const counties = getVisibleCounties();
+        if (counties.length === 0) {
+            container.style.display = "none";
+            populateMultiSelect("county", [], selectedCounties, () => {});
+        } else {
+            container.style.display = "";
+            populateMultiSelect("county", counties, selectedCounties, () => {
+                updateMultiSelectDisplay("county", selectedCounties, "All counties");
+            });
             updateMultiSelectDisplay("county", selectedCounties, "All counties");
-        });
-        updateMultiSelectDisplay("county", selectedCounties, "All counties");
+        }
     }
 }
 
@@ -566,19 +582,16 @@ setupRegionSearchKeys(areaSearchInput, areaSearchDropdown,
     });
 
 function selectAreaRegion(region) {
+    selectedCountries.clear();
+    selectedStates.clear();
+    selectedCounties.clear();
     if (region.level === "country") {
         selectedCountries.add(region.code);
-        selectedStates.clear();
-        selectedCounties.clear();
     } else if (region.level === "state") {
-        selectedCountries.clear();
         selectedCountries.add(region.countryCode);
         selectedStates.add(region.code);
-        selectedCounties.clear();
     } else if (region.level === "county") {
-        selectedCountries.clear();
         selectedCountries.add(region.countryCode);
-        selectedStates.clear();
         selectedStates.add(region.stateCode);
         selectedCounties.add(`${region.stateCode}|${region.name}`);
     }
@@ -623,19 +636,21 @@ function selectScopeRegion(region) {
     const stateSel = document.getElementById("scope-state");
     const countySel = document.getElementById("scope-county");
 
-    // Clear and rebuild so parent options exist before setting child values
+    // Clear all and rebuild incrementally so parent options exist before setting child values
     countrySel.value = "";
     stateSel.value = "";
     countySel.value = "";
-    populateScopeDropdowns();
 
     if (region.level === "country") {
+        populateScopeDropdowns();
         countrySel.value = region.code;
     } else if (region.level === "state") {
+        populateScopeDropdowns();
         countrySel.value = region.countryCode || "";
         populateScopeDropdowns();
         stateSel.value = region.code;
     } else if (region.level === "county") {
+        populateScopeDropdowns();
         countrySel.value = region.countryCode || "";
         populateScopeDropdowns();
         stateSel.value = region.stateCode || "";
@@ -951,44 +966,63 @@ function populateScopeDropdowns() {
     countrySel.value = countries.has(country) ? country : "";
     countrySel.disabled = false;
 
-    // States: filtered by country if one is selected
+    // States: filtered by country, hidden until a country is selected
     const stateSel = document.getElementById("scope-state");
     const states = new Set();
-    for (const obs of allObservations) {
-        if (obs.state && (!countrySel.value || obs.countryCode === countrySel.value)) {
-            states.add(obs.state);
+    if (countrySel.value) {
+        for (const obs of allObservations) {
+            if (obs.state && obs.countryCode === countrySel.value) {
+                states.add(obs.state);
+            }
         }
     }
-    stateSel.innerHTML = '<option value="">All states/provinces</option>';
-    for (const code of [...states].sort((a, b) => regionName(a).localeCompare(regionName(b)))) {
-        const opt = document.createElement("option");
-        opt.value = code;
-        opt.textContent = regionName(code);
-        stateSel.appendChild(opt);
+    if (!countrySel.value || states.size === 0) {
+        stateSel.style.display = "none";
+        stateSel.innerHTML = '<option value="">All states/provinces</option>';
+        stateSel.value = "";
+    } else {
+        stateSel.style.display = "";
+        stateSel.innerHTML = '<option value="">All states/provinces</option>';
+        for (const code of [...states].sort((a, b) => regionName(a).localeCompare(regionName(b)))) {
+            const opt = document.createElement("option");
+            opt.value = code;
+            opt.textContent = regionName(code);
+            stateSel.appendChild(opt);
+        }
+        stateSel.value = states.has(state) ? state : "";
+        stateSel.disabled = false;
     }
-    stateSel.value = states.has(state) ? state : "";
-    stateSel.disabled = states.size === 0;
 
-    // Counties: filtered by country and state if selected
+    // Counties: filtered by country and state, hidden until a state is selected
     const countySel = document.getElementById("scope-county");
     const county = countySel.value;
+    const activeState = stateSel.value;
     const counties = new Set();
-    for (const obs of allObservations) {
-        if (obs.county
-            && (!countrySel.value || obs.countryCode === countrySel.value)
-            && (!stateSel.value || obs.state === stateSel.value)) {
-            counties.add(obs.county);
+    if (activeState) {
+        for (const obs of allObservations) {
+            if (obs.county
+                && (!countrySel.value || obs.countryCode === countrySel.value)
+                && obs.state === activeState) {
+                counties.add(obs.county);
+            }
         }
     }
-    countySel.innerHTML = '<option value="">All counties</option>';
-    for (const c of [...counties].sort()) {
-        const opt = document.createElement("option");
-        opt.value = c;
-        opt.textContent = c;
-        countySel.appendChild(opt);
+    if (!activeState || counties.size === 0) {
+        countySel.style.display = "none";
+        countySel.innerHTML = '<option value="">All counties</option>';
+        countySel.value = "";
+    } else {
+        countySel.style.display = "";
+        countySel.innerHTML = '<option value="">All counties</option>';
+        for (const c of [...counties].sort()) {
+            const opt = document.createElement("option");
+            opt.value = c;
+            opt.textContent = c;
+            countySel.appendChild(opt);
+        }
+        countySel.value = counties.has(county) ? county : "";
+        countySel.disabled = false;
     }
-    countySel.value = counties.has(county) ? county : "";
-    countySel.disabled = counties.size === 0;
 }
 
 document.getElementById("scope-country").addEventListener("change", () => {
