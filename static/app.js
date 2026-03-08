@@ -263,15 +263,27 @@ function getVisibleCounties() {
 }
 
 function refreshStateDropdown() {
-    populateMultiSelect("state", getVisibleStates(), selectedStates, onStateChange);
-    updateMultiSelectDisplay("state", selectedStates, "All states/provinces");
+    if (selectedCountries.size === 0) {
+        populateMultiSelect("state", [], selectedStates, onStateChange);
+        updateMultiSelectDisplay("state", selectedStates, "Select a country first");
+    } else {
+        populateMultiSelect("state", getVisibleStates(), selectedStates, onStateChange);
+        updateMultiSelectDisplay("state", selectedStates, "All states/provinces");
+    }
 }
 
 function refreshCountyDropdown() {
-    populateMultiSelect("county", getVisibleCounties(), selectedCounties, () => {
+    if (selectedStates.size === 0) {
+        populateMultiSelect("county", [], selectedCounties, () => {
+            updateMultiSelectDisplay("county", selectedCounties, "All counties");
+        });
+        updateMultiSelectDisplay("county", selectedCounties, "Select a state first");
+    } else {
+        populateMultiSelect("county", getVisibleCounties(), selectedCounties, () => {
+            updateMultiSelectDisplay("county", selectedCounties, "All counties");
+        });
         updateMultiSelectDisplay("county", selectedCounties, "All counties");
-    });
-    updateMultiSelectDisplay("county", selectedCounties, "All counties");
+    }
 }
 
 let multiSelectActive = {}; // id -> boolean
