@@ -84,6 +84,8 @@ def load_probability_matrix(
     elif states:
         state_list = ", ".join(f"'{s}'" for s in states)
         geo_filter = f"h.state IN ({state_list})"
+        if country:
+            geo_filter += f" AND h.country = '{country}'"
     elif country:
         geo_filter = f"h.country = '{country}'"
 

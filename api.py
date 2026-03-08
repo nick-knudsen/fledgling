@@ -319,6 +319,9 @@ def search_hotspots(
         placeholders = ", ".join("?" for _ in state_list)
         geo_filter = f"state IN ({placeholders})"
         params.extend(state_list)
+        if country:
+            geo_filter += " AND country = ?"
+            params.append(country)
     elif country:
         geo_filter = "country = ?"
         params.append(country)

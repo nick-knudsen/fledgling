@@ -1209,6 +1209,7 @@ async function runOptimization() {
             });
         } else if (states.length > 0) {
             body.states = states;
+            if (countries.length > 0) body.country = countries[0];
         } else if (countries.length === 1) {
             body.country = countries[0];
         }
