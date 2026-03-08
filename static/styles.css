@@ -179,6 +179,7 @@ html[data-theme="dark"] .theme-switch-knob { left: 23px; }
     display: flex; gap: 0; border-bottom: 1px solid var(--border-light);
     position: sticky; top: 0; background: var(--bg-surface); z-index: 1;
 }
+.multi-select-sub-actions { top: auto; }
 .multi-select-actions button {
     flex: 1; padding: 0.35rem; font-size: 0.75rem; cursor: pointer;
     background: none; border: none; color: var(--accent); font-weight: 500;

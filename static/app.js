@@ -322,40 +322,63 @@ function populateMultiSelect(id, items, selectedSet, onChange) {
     actions.className = "multi-select-actions";
     const multiBtn = document.createElement("button");
     multiBtn.textContent = "Select Multiple";
-    multiBtn.dataset.action = "multi";
-    const allNoneBtn = document.createElement("button");
-    allNoneBtn.textContent = "Select All / None";
-    allNoneBtn.dataset.action = "allnone";
     actions.appendChild(multiBtn);
-    actions.appendChild(allNoneBtn);
     dropdown.appendChild(actions);
+
+    const subActions = document.createElement("div");
+    subActions.className = "multi-select-actions multi-select-sub-actions";
+    subActions.style.display = "none";
+    const selectAllBtn = document.createElement("button");
+    selectAllBtn.textContent = "Select All";
+    const clearBtn = document.createElement("button");
+    clearBtn.textContent = "Clear Selection";
+    subActions.appendChild(selectAllBtn);
+    subActions.appendChild(clearBtn);
+    dropdown.appendChild(subActions);
 
     multiBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         multiSelectActive[id] = !multiSelectActive[id];
         multiBtn.classList.toggle("active", multiSelectActive[id]);
+        subActions.style.display = multiSelectActive[id] ? "" : "none";
     });
 
-    allNoneBtn.addEventListener("click", (e) => {
+    selectAllBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        if (!multiSelectActive[id]) {
-            multiSelectActive[id] = true;
-            multiBtn.classList.add("active");
-        }
-        if (selectedSet.size > 0) {
-            selectedSet.clear();
-            dropdown.querySelectorAll(".multi-select-item").forEach(item => {
-                item.classList.remove("selected");
-            });
-        } else {
-            dropdown.querySelectorAll(".multi-select-item").forEach(item => {
-                selectedSet.add(item.dataset.value);
-                item.classList.add("selected");
-            });
-        }
+        dropdown.querySelectorAll(".multi-select-item[data-value]").forEach(item => {
+            selectedSet.add(item.dataset.value);
+            item.classList.add("selected");
+        });
+        allItem.classList.remove("selected");
         updateMultiSelectDisplay(id, selectedSet, defaultText);
         onChange();
     });
+
+    clearBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectedSet.clear();
+        dropdown.querySelectorAll(".multi-select-item").forEach(item => {
+            item.classList.remove("selected");
+        });
+        allItem.classList.add("selected");
+        updateMultiSelectDisplay(id, selectedSet, defaultText);
+        onChange();
+    });
+
+    const allItem = document.createElement("div");
+    allItem.className = "multi-select-item" + (selectedSet.size === 0 ? " selected" : "");
+    allItem.innerHTML = `<span>${defaultText}</span><span class="check">✓</span>`;
+    allItem.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectedSet.clear();
+        dropdown.querySelectorAll(".multi-select-item").forEach(el => el.classList.remove("selected"));
+        allItem.classList.add("selected");
+        updateMultiSelectDisplay(id, selectedSet, defaultText);
+        dropdown.scrollTop = 0;
+        dropdown.classList.remove("open");
+        onChange();
+    });
+    dropdown.appendChild(allItem);
 
     items.forEach(val => {
         const item = document.createElement("div");
@@ -374,6 +397,7 @@ function populateMultiSelect(id, items, selectedSet, onChange) {
                     selectedSet.add(val);
                     item.classList.add("selected");
                 }
+                allItem.classList.toggle("selected", selectedSet.size === 0);
             } else {
                 selectedSet.clear();
                 dropdown.querySelectorAll(".multi-select-item").forEach(el => el.classList.remove("selected"));
