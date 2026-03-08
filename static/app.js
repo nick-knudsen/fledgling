@@ -559,18 +559,15 @@ function selectAreaRegion(region) {
         selectedStates.clear();
         selectedCounties.clear();
     } else if (region.level === "state") {
-        if (selectedCountries.size > 0 && !selectedCountries.has(region.countryCode)) {
-            selectedCountries.clear();
-        }
+        selectedCountries.clear();
+        selectedCountries.add(region.countryCode);
         selectedStates.add(region.code);
         selectedCounties.clear();
     } else if (region.level === "county") {
-        if (selectedCountries.size > 0 && !selectedCountries.has(region.countryCode)) {
-            selectedCountries.clear();
-        }
-        if (selectedStates.size > 0 && !selectedStates.has(region.stateCode)) {
-            selectedStates.clear();
-        }
+        selectedCountries.clear();
+        selectedCountries.add(region.countryCode);
+        selectedStates.clear();
+        selectedStates.add(region.stateCode);
         selectedCounties.add(`${region.stateCode}|${region.name}`);
     }
     populateMultiSelect("country", Object.keys(searchAreas).sort(), selectedCountries, onCountryChange);
