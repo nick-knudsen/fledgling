@@ -106,7 +106,7 @@ function updateOptimizeBtn() {
         btn.disabled = true;
         btn.textContent = "Driving Time search coming soon";
     } else if (targetMode === "search") {
-        btn.disabled = !selectedSpecies;
+        btn.disabled = selectedSpeciesList.length === 0;
         btn.textContent = "Find Hotspots";
     } else if (lifelistSource === "fresh") {
         btn.disabled = false;
@@ -1157,8 +1157,8 @@ async function runOptimization() {
     btn.disabled = true;
     btn.textContent = "Optimizing...";
 
-    if (targetMode === "search" && !selectedSpecies) {
-        alert("Please select a species first.");
+    if (targetMode === "search" && selectedSpeciesList.length === 0) {
+        alert("Please select at least one species first.");
         btn.disabled = false;
         btn.textContent = "Find Hotspots";
         return;
@@ -1173,7 +1173,7 @@ async function runOptimization() {
     if (!kInput.value) kInput.value = 5;
 
     if (targetMode === "search") {
-        body.target_species = selectedSpecies.comName;
+        body.target_species = selectedSpeciesList.map(sp => sp.comName);
     } else if (lifelistSource === "fresh") {
         body.life_list = [];
     } else {
@@ -1788,8 +1788,8 @@ async function selectHotspotFromSearch(summary) {
         end_date: getDateValue("end"),
     };
 
-    if (targetMode === "search" && selectedSpecies) {
-        body.target_species = selectedSpecies.comName;
+    if (targetMode === "search" && selectedSpeciesList.length > 0) {
+        body.target_species = selectedSpeciesList.map(sp => sp.comName);
     } else {
         body.life_list = lifeList;
     }
@@ -2188,7 +2188,7 @@ function toggleHotspotBody(localityId, scroll) {
 
 // Species search autocomplete
 let allSpecies = []; // loaded from API
-let selectedSpecies = null;
+let selectedSpeciesList = []; // array of selected species objects
 let activeDropdownIndex = -1;
 
 // Set initial button state based on default mode
@@ -2246,16 +2246,39 @@ function renderSpeciesDropdown(matches) {
 }
 
 function selectSpecies(sp) {
-    selectedSpecies = sp;
-    speciesInput.value = sp.comName;
+    if (selectedSpeciesList.some(s => s.speciesCode === sp.speciesCode)) return;
+    selectedSpeciesList.push(sp);
+    speciesInput.value = "";
     speciesDropdown.scrollTop = 0;
     speciesDropdown.classList.remove("open");
+    renderSpeciesChips();
     updateOptimizeBtn();
 }
 
-speciesInput.addEventListener("input", () => {
-    selectedSpecies = null;
+function removeSpecies(speciesCode) {
+    selectedSpeciesList = selectedSpeciesList.filter(s => s.speciesCode !== speciesCode);
+    renderSpeciesChips();
     updateOptimizeBtn();
+}
+
+function renderSpeciesChips() {
+    const container = document.getElementById("species-chips");
+    container.innerHTML = "";
+    for (const sp of selectedSpeciesList) {
+        const chip = document.createElement("span");
+        chip.className = "species-chip";
+        chip.textContent = sp.comName;
+        const btn = document.createElement("button");
+        btn.className = "species-chip-remove";
+        btn.type = "button";
+        btn.innerHTML = "&times;";
+        btn.addEventListener("click", () => removeSpecies(sp.speciesCode));
+        chip.appendChild(btn);
+        container.appendChild(chip);
+    }
+}
+
+speciesInput.addEventListener("input", () => {
     const q = speciesInput.value.trim();
     if (q.length < 2) {
         speciesDropdown.classList.remove("open");

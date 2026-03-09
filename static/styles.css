@@ -375,6 +375,22 @@ td { padding: 0.4rem 0; border-bottom: 1px solid var(--border-light); }
     color: var(--text-secondary); font-style: italic; font-size: 0.8rem;
     margin-left: 0.35rem;
 }
+/* Species chips */
+.species-chips {
+    display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem;
+}
+.species-chip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    background: var(--hover); border: 1px solid var(--input-border);
+    border-radius: 999px; padding: 0.2rem 0.55rem; font-size: 0.8rem;
+    color: var(--text); line-height: 1.4;
+}
+.species-chip-remove {
+    background: none; border: none; color: var(--text-secondary);
+    cursor: pointer; font-size: 1rem; line-height: 1; padding: 0;
+    margin-left: 0.1rem; display: flex; align-items: center;
+}
+.species-chip-remove:hover { color: var(--text); }
 /* Region search */
 .region-search { position: relative; }
 .region-search-dropdown {

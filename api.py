@@ -49,7 +49,7 @@ class OptimizeRequest(BaseModel):
     center_lat: float | None = None
     center_lon: float | None = None
     max_driving_minutes: int | None = None
-    target_species: str | None = None
+    target_species: list[str] | None = None
     exclude_locality_ids: list[int] | None = None
 
 
@@ -360,7 +360,7 @@ class HotspotDetailRequest(BaseModel):
     start_date: date
     end_date: date
     life_list: list[str] = []
-    target_species: str | None = None
+    target_species: list[str] | None = None
 
 
 @app.post("/api/hotspot-details")

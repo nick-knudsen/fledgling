@@ -208,4 +208,5 @@ __marimo__/
 
 data/
 secrets.toml
-run.py 
+run.py
+CLAUDE.md
