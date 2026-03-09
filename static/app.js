@@ -2302,11 +2302,13 @@ speciesInput.addEventListener("keydown", (e) => {
         activeDropdownIndex = Math.max(activeDropdownIndex - 1, 0);
         items.forEach((el, i) => el.classList.toggle("active", i === activeDropdownIndex));
         items[activeDropdownIndex].scrollIntoView({ block: "nearest" });
-    } else if (e.key === "Enter" && activeDropdownIndex >= 0) {
+    } else if (e.key === "Enter") {
         e.preventDefault();
         const q = speciesInput.value.trim();
+        if (!q) return;
         const matches = rankedSearch(q);
-        if (matches[activeDropdownIndex]) selectSpecies(matches[activeDropdownIndex]);
+        const idx = activeDropdownIndex >= 0 ? activeDropdownIndex : 0;
+        if (matches[idx]) selectSpecies(matches[idx]);
     }
 });
 
