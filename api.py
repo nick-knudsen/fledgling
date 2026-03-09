@@ -261,6 +261,7 @@ def run_optimization(req: OptimizeRequest):
             "latitude": h.latitude,
             "longitude": h.longitude,
             "county": h.county,
+            "state": h.state,
             "marginal_gain": round(h.marginal_gain, 2),
             "cumulative_expected": round(h.cumulative_expected, 2),
             "target_species": [
@@ -378,7 +379,7 @@ def get_hotspot_details(req: HotspotDetailRequest):
         con = duckdb.connect(DB_PATH, read_only=True)
         try:
             row = con.execute(
-                f"SELECT locality_id, locality, latitude, longitude, county "
+                f"SELECT locality_id, locality, latitude, longitude, county, state "
                 f"FROM hotspots WHERE locality_id = {req.locality_id}"
             ).fetchone()
         finally:
@@ -391,6 +392,7 @@ def get_hotspot_details(req: HotspotDetailRequest):
             "latitude": row[2],
             "longitude": row[3],
             "county": row[4],
+            "state": row[5],
             "target_species": [],
         }
 
@@ -408,6 +410,7 @@ def get_hotspot_details(req: HotspotDetailRequest):
         "latitude": float(row["latitude"]),
         "longitude": float(row["longitude"]),
         "county": row["county"],
+        "state": row["state"],
         "target_species": target_species,
     }
 

@@ -20,6 +20,7 @@ class HotspotResult:
     latitude: float
     longitude: float
     county: str
+    state: str
     marginal_gain: float
     cumulative_expected: float
     target_species: list[SpeciesProb]
@@ -131,6 +132,7 @@ def load_probability_matrix(
         h.latitude,
         h.longitude,
         h.county,
+        h.state,
         f.common_name,
         f.detection_prob
     FROM filtered_freq f
@@ -145,7 +147,7 @@ def load_probability_matrix(
         con.unregister("life_list_view")
 
     if df.empty:
-        empty_info = pd.DataFrame(columns=["locality", "locality_id", "latitude", "longitude", "county"])
+        empty_info = pd.DataFrame(columns=["locality", "locality_id", "latitude", "longitude", "county", "state"])
         return empty_info, np.empty((0, 0)), []
 
     pivot = df.pivot_table(
@@ -159,7 +161,7 @@ def load_probability_matrix(
     prob_matrix = pivot.values.astype(np.float64)
 
     hotspot_info = (
-        df[["locality_id", "locality", "latitude", "longitude", "county"]]
+        df[["locality_id", "locality", "latitude", "longitude", "county", "state"]]
         .drop_duplicates(subset="locality_id")
         .set_index("locality_id")
         .loc[pivot.index]
@@ -278,6 +280,7 @@ def optimize_hotspots(
             latitude=float(row["latitude"]),
             longitude=float(row["longitude"]),
             county=row["county"],
+            state=row["state"],
             marginal_gain=gain,
             cumulative_expected=cumulative,
             target_species=species_probs,

@@ -1295,6 +1295,40 @@ function renderResults(data) {
     renderResultsView();
 }
 
+// Adjust longitudes so markers cluster across the antimeridian.
+// Mutates entries in place. Sets mapLngBase and mapLngOffset for reuse.
+let mapLngBase = 0, mapLngOffset = 0;
+function clusterLongitudes(entries) {
+    mapLngBase = 0; mapLngOffset = 0;
+    if (entries.length <= 1) return;
+    const norm = lng => ((lng % 360) + 360) % 360;
+    const sorted = entries.map(e => norm(e.lng)).sort((a, b) => a - b);
+    let maxGap = 0, base = 0;
+    for (let i = 1; i < sorted.length; i++) {
+        const gap = sorted[i] - sorted[i - 1];
+        if (gap > maxGap) { maxGap = gap; base = sorted[i]; }
+    }
+    const wrapGap = 360 - sorted[sorted.length - 1] + sorted[0];
+    if (wrapGap > maxGap) base = sorted[0];
+    mapLngBase = base;
+    entries.forEach(e => {
+        let lng = norm(e.lng);
+        if (lng < base) lng += 360;
+        e.lng = lng;
+    });
+    const avg = entries.reduce((s, e) => s + e.lng, 0) / entries.length;
+    mapLngOffset = Math.round(avg / 360) * 360;
+    if (mapLngOffset !== 0) entries.forEach(e => { e.lng -= mapLngOffset; });
+}
+
+// Apply the same clustering adjustment to any raw longitude
+function adjustLng(lng) {
+    const norm = ((lng % 360) + 360) % 360;
+    let adjusted = norm;
+    if (adjusted < mapLngBase) adjusted += 360;
+    return adjusted - mapLngOffset;
+}
+
 function updateMap(fitToResults = false) {
     if (!map) return;
 
@@ -1302,8 +1336,6 @@ function updateMap(fitToResults = false) {
     Object.values(markers).forEach(m => m.remove());
     markers = {};
 
-    const resultBounds = [];
-    const allBounds = [];
     const resultIds = new Set();
 
     // Collect all marker data, then add in z-order (lowest priority first)
@@ -1332,16 +1364,20 @@ function updateMap(fitToResults = false) {
             const markerClass = inItinerary ? "map-marker-inner itinerary-marker" : "map-marker-inner";
             const order = inItinerary ? itineraryIdx : adjRank;
             markerEntries.push({ locality_id: h.locality_id, lat: h.latitude, lng: h.longitude, label, markerClass, inItinerary, order, isResult: true });
-            resultBounds.push([h.latitude, h.longitude]);
-            allBounds.push([h.latitude, h.longitude]);
         });
     }
 
     itinerary.forEach((it, idx) => {
         if (resultIds.has(it.locality_id)) return;
         markerEntries.push({ locality_id: it.locality_id, lat: it.latitude, lng: it.longitude, label: String(idx + 1), markerClass: "map-marker-inner itinerary-marker", inItinerary: true, order: idx, isResult: false });
-        allBounds.push([it.latitude, it.longitude]);
     });
+
+    // Cluster longitudes so markers near the antimeridian group correctly
+    clusterLongitudes(markerEntries);
+
+    // Build bounds from adjusted coordinates
+    const resultBounds = markerEntries.filter(e => e.isResult).map(e => [e.lat, e.lng]);
+    const allBounds = markerEntries.map(e => [e.lat, e.lng]);
 
     // Sort: non-itinerary before itinerary, then higher order first (so lower order renders last = on top)
     markerEntries.sort((a, b) => {
@@ -1429,6 +1465,8 @@ async function updateDrivingTime() {
 
             if (map) {
                 const geojson = data.routes[0].geometry;
+                // Shift route coordinates to match clustered marker longitudes
+                geojson.coordinates = geojson.coordinates.map(([lng, lat]) => [adjustLng(lng), lat]);
                 const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
                 routeLine = L.geoJSON(geojson, {
                     style: { color: accent, weight: 3, opacity: 0.7 }
@@ -1577,7 +1615,7 @@ function renderExploreView() {
                 </div>
                 <div class="hotspot-body">
                     <div class="hotspot-meta">
-                        ${h.county} &middot;
+                        ${h.county || regionName(h.state) || ""} &middot;
                         ${h.latitude.toFixed(4)}, ${h.longitude.toFixed(4)} &middot;
                         <a href="https://ebird.org/hotspot/L${h.locality_id}" target="_blank" rel="noopener">View on eBird</a> &middot;
                         <a href="https://www.google.com/maps/search/${encodeURIComponent(h.locality)}/@${h.latitude},${h.longitude},15z" target="_blank" rel="noopener">View on Google Maps</a> &middot;
@@ -1716,7 +1754,7 @@ function renderHotspotSearchDropdown(results) {
     filtered.forEach(r => {
         const item = document.createElement("div");
         item.className = "hotspot-search-dropdown-item";
-        item.innerHTML = `${r.locality}<span class="hotspot-search-county">${r.county}</span>`;
+        item.innerHTML = `${r.locality}<span class="hotspot-search-county">${r.county || regionName(r.state) || ""}</span>`;
         item.addEventListener("mousedown", (e) => {
             e.preventDefault();
             selectHotspotFromSearch(r);
@@ -1886,7 +1924,7 @@ function renderPlanView() {
                 </div>
                 <div class="hotspot-body">
                     <div class="hotspot-meta">
-                        ${h.county} &middot;
+                        ${h.county || regionName(h.state) || ""} &middot;
                         ${h.latitude.toFixed(4)}, ${h.longitude.toFixed(4)} &middot;
                         <a href="https://ebird.org/hotspot/L${h.locality_id}" target="_blank" rel="noopener">View on eBird</a> &middot;
                         <a href="https://www.google.com/maps/search/${encodeURIComponent(h.locality)}/@${h.latitude},${h.longitude},15z" target="_blank" rel="noopener">View on Google Maps</a>
@@ -2263,7 +2301,7 @@ speciesInput.addEventListener("focus", () => {
         hotspots: [
             {
                 locality_id: 191106, locality: "Central Park", latitude: 40.7829, longitude: -73.9654,
-                county: "New York County",
+                county: "New York County", state: "US-NY",
                 target_species: [
                     { common_name: "Blackburnian Warbler", probability: 0.42, recently_observed: true },
                     { common_name: "Scarlet Tanager", probability: 0.38, recently_observed: true },
@@ -2272,7 +2310,7 @@ speciesInput.addEventListener("focus", () => {
             },
             {
                 locality_id: 165143, locality: "Jamaica Bay Wildlife Refuge", latitude: 40.6171, longitude: -73.8255,
-                county: "Queens County",
+                county: "Queens County", state: "US-NY",
                 target_species: [
                     { common_name: "American Oystercatcher", probability: 0.55, recently_observed: true },
                     { common_name: "Seaside Sparrow", probability: 0.31, recently_observed: true },
@@ -2282,7 +2320,7 @@ speciesInput.addEventListener("focus", () => {
             },
             {
                 locality_id: 109516, locality: "Prospect Park", latitude: 40.6602, longitude: -73.9690,
-                county: "Kings County",
+                county: "Kings County", state: "US-NY",
                 target_species: [
                     { common_name: "Wood Thrush", probability: 0.35, recently_observed: true },
                     { common_name: "Eastern Towhee", probability: 0.28, recently_observed: true },
