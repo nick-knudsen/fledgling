@@ -1475,8 +1475,19 @@ async function updateDrivingTime() {
 
             if (map) {
                 const geojson = data.routes[0].geometry;
-                // Shift route coordinates to match clustered marker longitudes
-                geojson.coordinates = geojson.coordinates.map(([lng, lat]) => [adjustLng(lng), lat]);
+                // Shift route coordinates to match clustered marker longitudes,
+                // keeping consecutive points continuous to avoid wrapping artifacts.
+                geojson.coordinates = geojson.coordinates.map(([lng, lat], i, arr) => {
+                    let adj = adjustLng(lng);
+                    if (i > 0) {
+                        const prevLng = arr[i - 1][0];
+                        // Keep this point within 180° of the previous (already-adjusted) point
+                        while (adj - prevLng > 180) adj -= 360;
+                        while (prevLng - adj > 180) adj += 360;
+                    }
+                    arr[i][0] = adj;   // store adjusted value for next iteration
+                    return [adj, lat];
+                });
                 const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
                 routeLine = L.geoJSON(geojson, {
                     style: { color: accent, weight: 3, opacity: 0.7 }
