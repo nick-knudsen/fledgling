@@ -42,7 +42,7 @@ html[data-theme="dark"] {
 body { font-family: system-ui, -apple-system, sans-serif; color: var(--text); background: var(--bg); }
 
 /* Logo in sidebar */
-.sidebar-logo { text-align: center; padding-bottom: 1rem; align-items: center; border-bottom: 1px solid var(--border); overflow: hidden; margin: -1.5rem -1.5rem 0 -1.5rem; padding-top: 1.5rem; }
+.sidebar-logo { text-align: center; padding-bottom: 1rem; align-items: center; border-bottom: 1px solid var(--border); overflow: hidden; margin: -1.5rem -1.5rem 0 -1.5rem; padding-top: 1.5rem; flex-shrink: 0; }
 .sidebar-logo p { color: var(--text-secondary); margin-top: 0.25rem; font-size: 0.85rem; }
 .logo { height: 5rem; vertical-align: middle; }
 .logo-dark { display: none; }
@@ -79,6 +79,7 @@ html[data-theme="dark"] .theme-switch-knob { left: 23px; }
     width: 340px; min-width: 340px; background: var(--bg-surface);
     border-right: 1px solid var(--border); padding: 1.5rem;
     display: flex; flex-direction: column; gap: 1.25rem;
+    overflow-y: auto;
 }
 
 .form-group label {
@@ -681,7 +682,8 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
 @media (max-width: 1024px) and (min-width: 769px) {
     .sidebar { width: 280px; min-width: 280px; padding: 1.25rem; }
     .sidebar-logo { margin: -1.25rem -1.25rem 0 -1.25rem; padding-top: 1.25rem; }
-    .logo { height: 4rem; }
+    .logo { height: 3rem; }
+    .sidebar-logo p { font-size: 0.75rem; }
     .main { padding: 0 1.5rem 1.5rem; }
     #map { height: 300px; }
 }
@@ -689,7 +691,6 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
 /* Wide screen: map on right, hotspot list on left */
 @media (min-width: 1400px) {
     .layout { height: 100vh; }
-    .sidebar { overflow-y: auto; }
     .main { overflow-y: auto; scroll-padding-top: 0; }
     .results-layout {
         flex-direction: row; gap: 1.5rem;
