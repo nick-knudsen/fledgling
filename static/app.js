@@ -1228,8 +1228,18 @@ async function runOptimization() {
             body: JSON.stringify(body),
         });
         if (!resp.ok) {
-            const err = await resp.json();
-            throw new Error(err.detail || "Optimization failed");
+            let msg = "Optimization failed";
+            try {
+                const err = await resp.json();
+                msg = err.detail || msg;
+            } catch {
+                if (resp.status === 502 || resp.status === 504) {
+                    msg = "The search timed out. Try a smaller area or date range.";
+                } else {
+                    msg = `Server error (${resp.status}). Please try again.`;
+                }
+            }
+            throw new Error(msg);
         }
         const data = await resp.json();
         renderResults(data);

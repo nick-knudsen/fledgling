@@ -73,7 +73,18 @@ def load_probability_matrix(
         prob_matrix: numpy array shape (num_hotspots, num_species)
         species_list: list of species names (columns of prob_matrix)
     """
-    day_list = ", ".join(str(d) for d in days_of_year)
+    # For wide date ranges, sample every Nth day to reduce the scan size.
+    # Rolling windows make adjacent days nearly identical, so the MAX()
+    # aggregate gives very similar results with fewer days.
+    if len(days_of_year) > 30:
+        step = max(1, len(days_of_year) // 30)
+        sampled_days = days_of_year[::step]
+        # Always include the last day so the range endpoints are represented
+        if days_of_year[-1] not in sampled_days:
+            sampled_days.append(days_of_year[-1])
+        day_list = ", ".join(str(d) for d in sampled_days)
+    else:
+        day_list = ", ".join(str(d) for d in days_of_year)
 
     geo_filter = "1=1"
     if locality_ids:

@@ -239,19 +239,23 @@ def run_optimization(req: OptimizeRequest):
                 "species_combined_probs": [],
             }
 
-    result = optimize_hotspots(
-        db_path=DB_PATH,
-        life_list_names=req.life_list,
-        start_date=req.start_date,
-        end_date=req.end_date,
-        k=req.k,
-        state_counties=[(sc.state, sc.county) for sc in req.state_counties] if req.state_counties else None,
-        states=req.states,
-        country=req.country,
-        locality_ids=locality_ids,
-        target_species=req.target_species,
-        exclude_locality_ids=req.exclude_locality_ids,
-    )
+    try:
+        result = optimize_hotspots(
+            db_path=DB_PATH,
+            life_list_names=req.life_list,
+            start_date=req.start_date,
+            end_date=req.end_date,
+            k=req.k,
+            state_counties=[(sc.state, sc.county) for sc in req.state_counties] if req.state_counties else None,
+            states=req.states,
+            country=req.country,
+            locality_ids=locality_ids,
+            target_species=req.target_species,
+            exclude_locality_ids=req.exclude_locality_ids,
+        )
+    except Exception:
+        logger.exception("Optimization failed")
+        raise HTTPException(status_code=500, detail="Search failed. Try a smaller area or date range.")
 
     hotspots = [
         {
