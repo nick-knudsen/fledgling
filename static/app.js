@@ -2194,33 +2194,31 @@ let activeDropdownIndex = -1;
 // Set initial button state based on default mode
 updateOptimizeBtn();
 
+let speciesFuse = null;
 fetch("/api/species")
     .then(r => r.json())
-    .then(data => { allSpecies = data; });
+    .then(data => {
+        allSpecies = data;
+        speciesFuse = new Fuse(allSpecies, {
+            keys: [
+                { name: "comName", weight: 2 },
+                { name: "sciName", weight: 1 },
+                { name: "bandingCodes", weight: 1.5 },
+                { name: "comNameCodes", weight: 1.5 },
+                { name: "sciNameCodes", weight: 1 },
+                { name: "speciesCode", weight: 1 },
+            ],
+            threshold: 0.4,
+            ignoreLocation: true,
+        });
+    });
 
 const speciesInput = document.getElementById("species-input");
 const speciesDropdown = document.getElementById("species-dropdown");
 
-function searchRank(species, query) {
-    // Returns 0 (no match) or 1-6 (priority, lower = better match)
-    const q = query.toLowerCase();
-    if (species.comName.toLowerCase().includes(q)) return 1;
-    if (species.bandingCodes.some(c => c.toLowerCase().startsWith(q))) return 2;
-    if (species.comNameCodes.some(c => c.toLowerCase().startsWith(q))) return 3;
-    if (species.sciNameCodes.some(c => c.toLowerCase().startsWith(q))) return 4;
-    if (species.speciesCode.toLowerCase().startsWith(q)) return 5;
-    if (species.sciName.toLowerCase().includes(q)) return 6;
-    return 0;
-}
-
 function rankedSearch(query) {
-    const scored = [];
-    for (const sp of allSpecies) {
-        const rank = searchRank(sp, query);
-        if (rank > 0) scored.push({ sp, rank });
-    }
-    scored.sort((a, b) => a.rank - b.rank);
-    return scored.slice(0, 20).map(s => s.sp);
+    if (!speciesFuse) return [];
+    return speciesFuse.search(query, { limit: 20 }).map(r => r.item);
 }
 
 function renderSpeciesDropdown(matches) {
@@ -2278,14 +2276,19 @@ function renderSpeciesChips() {
     }
 }
 
+let _speciesSearchTimer = null;
 speciesInput.addEventListener("input", () => {
     const q = speciesInput.value.trim();
     if (q.length < 2) {
+        clearTimeout(_speciesSearchTimer);
         speciesDropdown.classList.remove("open");
         return;
     }
-    const matches = rankedSearch(q);
-    renderSpeciesDropdown(matches);
+    clearTimeout(_speciesSearchTimer);
+    _speciesSearchTimer = setTimeout(() => {
+        const matches = rankedSearch(q);
+        renderSpeciesDropdown(matches);
+    }, 150);
 });
 
 speciesInput.addEventListener("keydown", (e) => {
