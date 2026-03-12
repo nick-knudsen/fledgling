@@ -6,6 +6,7 @@
     <title>fledgling - Hotspot Finder</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
     <link rel="stylesheet" href="/styles.css" />
     <script>document.documentElement.setAttribute("data-theme", window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");</script>
 </head>
@@ -46,7 +47,7 @@
                         </div>
                         <div class="help-dialog-overlay" id="upload-help-overlay">
                             <div class="help-dialog">
-                                <p><a href="https://ebird.org/downloadMyData" target="_blank" rel="noopener noreferrer">Download your data from eBird</a> and upload the unzipped file here. Your data are not stored on this site in any way.</p>
+                                <p><a href="https://ebird.org/downloadMyData" target="_blank" rel="noopener noreferrer">Download your data from eBird</a> and upload the unzipped file here. Your data are not stored on the server in any way.</p>
                                 <button type="button" class="help-dialog-close" id="upload-help-close">OK</button>
                             </div>
                         </div>
@@ -147,7 +148,10 @@
                 <div class="theme-switch" id="theme-toggle" title="Toggle dark mode">
                     <span class="theme-switch-knob"></span>
                 </div>
-                <button type="button" class="tour-help-btn" id="tour-help-btn"><span class="tour-help-icon">?</span> Help</button>
+                <div style="display: flex; gap: 0.4rem;">
+                    <button type="button" class="tour-help-btn" id="learn-more-btn"><span class="tour-help-icon" style="font-style: italic; padding-right: 1px;">i</span> Learn More</button>
+                    <button type="button" class="tour-help-btn" id="tour-help-btn"><span class="tour-help-icon">?</span> Help</button>
+                </div>
             </div>
 
             <div class="sidebar-footer">
@@ -179,6 +183,25 @@
                        style="flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 1rem;" />
                 <button type="submit" class="help-dialog-close" style="white-space: nowrap;">Enter</button>
             </form>
+        </div>
+    </div>
+
+    <div class="help-dialog-overlay" id="learn-more-overlay">
+        <div class="help-dialog" style="max-width: 480px; text-align: left;">
+            <p style="font-size: 1.1rem; font-weight: 600; text-align: center; margin-bottom: 0.75rem;">How It Works</p>
+            <p style="margin-bottom: 0.5rem;">fledgling uses <strong>greedy submodular optimization</strong> to pick the set of hotspots that maximizes your expected target species.</p>
+            <p style="margin-bottom: 0.5rem;">For each hotspot it estimates a <strong>detection probability</strong> for every species - the chance you'd observe it on a single "average effort" visit during your date window. These probabilities are a Wilson score lower bound based on observation frequency on a rolling 7-day window centered on your selected dates across all years of historic data. This estimator is conservative and robust to small sample sizes. </p>
+            <p style="margin-bottom: 0.5rem;">This assumes detection probabilities are independent across hotspots and species, and that past observation frequency predicts future detection probability, both reasonable approximations, but not always true.</p>
+            <p style="margin-bottom: 0.5rem;">The optimizer works greedily: it first picks the hotspot with the highest expected target species count. Then, for each remaining hotspot, it updates the <strong>marginal gain</strong>, which is the additional species you'd expect <em>after accounting for what you'd likely already see</em> at the hotspots chosen so far.</p>
+            <p style="margin-bottom: 0.5rem;">Formally, the probability of observing species s across all selected hotspots is: </p>
+            <p style="text-align: center">$$P(\text{observe } s) = 1 - \prod_{\text{hotspots } h}(1 - \hat{p}_{s \text{ lower, } h})$$</p>
+            <p>And the expected target species count is:</p>
+            <p style="text-align: center;">$$\sum_{s} P(\text{observe } s)$$</p>
+            <p style="margin-bottom: 0.75rem;">This is a conservative statistical estimate of the number of target species you are likely to encounter for your selected itinerary, but of course it will vary based on effort, weather, luck, and the whims of individual birds and populations at large.</p>
+            <p style="margin-bottom: 0.25rem">Happy birding!</p>
+            <p>Nick</p>
+
+            <button type="button" class="help-dialog-close" id="learn-more-close">Got it</button>
         </div>
     </div>
 
@@ -214,6 +237,8 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
     <script src="/app.js"></script>
     <script data-goatcounter="https://knuds.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>

@@ -189,6 +189,10 @@ html[data-theme="dark"] .theme-switch-knob { left: 23px; }
 .multi-select-actions button.active { color: #fff; background: var(--accent); }
 .form-hint { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; }
 
+#learn-more-close {
+    display: block; margin: 0 auto;
+}
+
 .help-btn {
     width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--text-secondary);
     background: none; color: var(--text-secondary); font-size: .9rem; font-weight: 600;
@@ -204,10 +208,11 @@ html[data-theme="dark"] .theme-switch-knob { left: 23px; }
 .help-dialog-overlay.open { display: flex; }
 .help-dialog {
     background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 1.5rem; max-width: 360px; width: 90%; box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-    text-align: center;
+    padding: 1.5rem; max-width: 360px; width: 90%; max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2); text-align: center;
 }
 .help-dialog p { font-size: 0.9rem; color: var(--text); line-height: 1.5; margin-bottom: 1rem; }
+.help-dialog .katex-display { overflow-x: auto; overflow-y: hidden; }
 .help-dialog a { color: var(--accent); text-decoration: none; }
 .help-dialog a:hover { text-decoration: underline; }
 .help-dialog-close {
@@ -567,13 +572,8 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
     display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
 }
 .walkthrough-dots {
-    display: flex; gap: 5px;
+    font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap;
 }
-.walkthrough-dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--border); transition: background 0.2s;
-}
-.walkthrough-dot.active { background: var(--accent); }
 .walkthrough-btns {
     display: flex; gap: 0.4rem;
 }

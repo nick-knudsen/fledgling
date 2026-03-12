@@ -68,15 +68,34 @@ document.getElementById("theme-toggle").addEventListener("click", () => {
     applyTheme(isDark ? "light" : "dark");
 });
 
+function openHelpOverlay(id) {
+    document.getElementById(id).classList.add("open");
+    document.body.style.overflow = "hidden";
+}
+function closeHelpOverlay(id) {
+    document.getElementById(id).classList.remove("open");
+    document.body.style.overflow = "";
+}
+
 // Upload help dialog
-document.getElementById("upload-help-btn").addEventListener("click", () => {
-    document.getElementById("upload-help-overlay").classList.add("open");
-});
-document.getElementById("upload-help-close").addEventListener("click", () => {
-    document.getElementById("upload-help-overlay").classList.remove("open");
-});
+document.getElementById("upload-help-btn").addEventListener("click", () => openHelpOverlay("upload-help-overlay"));
+document.getElementById("upload-help-close").addEventListener("click", () => closeHelpOverlay("upload-help-overlay"));
 document.getElementById("upload-help-overlay").addEventListener("click", (e) => {
-    if (e.target === e.currentTarget) document.getElementById("upload-help-overlay").classList.remove("open");
+    if (e.target === e.currentTarget) closeHelpOverlay("upload-help-overlay");
+});
+
+// Learn More dialog
+let learnMoreRendered = false;
+document.getElementById("learn-more-btn").addEventListener("click", () => {
+    openHelpOverlay("learn-more-overlay");
+    if (!learnMoreRendered && typeof renderMathInElement === "function") {
+        renderMathInElement(document.getElementById("learn-more-overlay"), { delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }] });
+        learnMoreRendered = true;
+    }
+});
+document.getElementById("learn-more-close").addEventListener("click", () => closeHelpOverlay("learn-more-overlay"));
+document.getElementById("learn-more-overlay").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeHelpOverlay("learn-more-overlay");
 });
 
 const tileSets = {
@@ -2465,6 +2484,12 @@ speciesInput.addEventListener("focus", () => {
             prefer: "right"
         },
         {
+            selector: "#learn-more-btn",
+            title: "Learn More",
+            desc: "Curious about the math? Click here to learn how the optimizer picks the best hotspots.",
+            prefer: "right"
+        },
+        {
             selector: "#tour-help-btn",
             title: "Need Help?",
             desc: "You can retake this tour any time by clicking this button.",
@@ -2670,10 +2695,8 @@ speciesInput.addEventListener("focus", () => {
             titleEl.textContent = step.title;
             descEl.textContent = step.desc;
 
-            // Dots
-            dotsEl.innerHTML = steps.map((_, i) =>
-                `<div class="walkthrough-dot${i === currentStep ? " active" : ""}"></div>`
-            ).join("");
+            // Step counter
+            dotsEl.textContent = `${currentStep + 1} / ${steps.length}`;
 
             // Buttons
             let btns = "";
