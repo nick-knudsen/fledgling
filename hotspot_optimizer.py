@@ -87,28 +87,36 @@ def load_probability_matrix(
         day_list = ", ".join(str(d) for d in days_of_year)
 
     geo_filter = "1=1"
+    params: list = []
     if locality_ids:
-        id_list = ", ".join(str(i) for i in locality_ids)
-        geo_filter = f"h.locality_id IN ({id_list})"
+        id_placeholders = ", ".join("?" for _ in locality_ids)
+        geo_filter = f"h.locality_id IN ({id_placeholders})"
+        params.extend(locality_ids)
     elif state_counties:
-        pairs = " OR ".join(f"(h.state = '{s}' AND h.county = '{c}')" for s, c in state_counties)
+        pairs = " OR ".join("(h.state = ? AND h.county = ?)" for _ in state_counties)
         geo_filter = f"({pairs})"
+        for s, c in state_counties:
+            params.extend([s, c])
     elif states:
-        state_list = ", ".join(f"'{s}'" for s in states)
-        geo_filter = f"h.state IN ({state_list})"
+        state_placeholders = ", ".join("?" for _ in states)
+        geo_filter = f"h.state IN ({state_placeholders})"
+        params.extend(states)
         if country:
-            geo_filter += f" AND h.country = '{country}'"
+            geo_filter += " AND h.country = ?"
+            params.append(country)
     elif country:
-        geo_filter = f"h.country = '{country}'"
+        geo_filter = "h.country = ?"
+        params.append(country)
 
     if exclude_locality_ids:
-        exclude_list = ", ".join(str(i) for i in exclude_locality_ids)
-        geo_filter += f" AND h.locality_id NOT IN ({exclude_list})"
+        exclude_placeholders = ", ".join("?" for _ in exclude_locality_ids)
+        geo_filter += f" AND h.locality_id NOT IN ({exclude_placeholders})"
+        params.extend(exclude_locality_ids)
 
     if target_species:
-        escaped = [name.replace("'", "''") for name in target_species]
-        in_list = ", ".join(f"'{name}'" for name in escaped)
-        species_filter = f"r.common_name IN ({in_list})"
+        species_placeholders = ", ".join("?" for _ in target_species)
+        species_filter = f"r.common_name IN ({species_placeholders})"
+        params.extend(target_species)
     elif life_list_names:
         life_df = pd.DataFrame({"common_name": life_list_names})
         con.register("life_list_view", life_df)
@@ -154,7 +162,7 @@ def load_probability_matrix(
     ORDER BY f.locality_id, f.common_name
     """
 
-    df = con.execute(query).fetchdf()
+    df = con.execute(query, params).fetchdf()
 
     if not target_species and life_list_names:
         con.unregister("life_list_view")
