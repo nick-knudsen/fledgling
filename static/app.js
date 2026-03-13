@@ -54,6 +54,8 @@ let isDragging = false;
 let routeLine = null;
 let hotspotSearchTimeout = null;
 let activeHotspotSearchIndex = -1;
+let activeTripId = null;
+let seenSpecies = new Set();
 
 applyTheme(getSystemTheme());
 
@@ -97,6 +99,277 @@ document.getElementById("learn-more-close").addEventListener("click", () => clos
 document.getElementById("learn-more-overlay").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeHelpOverlay("learn-more-overlay");
 });
+
+// Save trip dialog
+document.getElementById("save-trip-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = document.getElementById("save-trip-name").value.trim();
+    if (!name) return;
+    closeHelpOverlay("save-trip-overlay");
+    saveCurrentTrip(name);
+});
+document.getElementById("save-trip-cancel").addEventListener("click", () => closeHelpOverlay("save-trip-overlay"));
+document.getElementById("save-trip-overlay").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeHelpOverlay("save-trip-overlay");
+});
+
+// Load trip dialog
+document.getElementById("load-trip-close").addEventListener("click", () => closeHelpOverlay("load-trip-overlay"));
+document.getElementById("load-trip-overlay").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeHelpOverlay("load-trip-overlay");
+});
+
+// ── Saved Trips ──
+
+function getSavedTrips() {
+    try { return JSON.parse(localStorage.getItem("saved-trips")) || []; }
+    catch { return []; }
+}
+
+function saveTripToStorage(trip) {
+    const trips = getSavedTrips();
+    const idx = trips.findIndex(t => t.id === trip.id);
+    if (idx >= 0) trips[idx] = trip;
+    else trips.push(trip);
+    localStorage.setItem("saved-trips", JSON.stringify(trips));
+}
+
+function deleteTripFromStorage(tripId) {
+    const trips = getSavedTrips().filter(t => t.id !== tripId);
+    localStorage.setItem("saved-trips", JSON.stringify(trips));
+    if (activeTripId === tripId) unloadTrip();
+}
+
+function buildTripSnapshot(name) {
+    return {
+        id: crypto.randomUUID(),
+        name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        searchParams: {
+            targetMode,
+            lifelistSource,
+            listType,
+            searchMode,
+            lastRequestBody: structuredClone(lastRequestBody),
+        },
+        lifeList: [...lifeList],
+        selectedSpeciesList: structuredClone(selectedSpeciesList),
+        resultsData: structuredClone(lastResultsData),
+        itinerary: structuredClone(itinerary),
+        seenSpecies: [...seenSpecies],
+    };
+}
+
+function updateActiveTripState() {
+    if (!activeTripId) return;
+    const trips = getSavedTrips();
+    const trip = trips.find(t => t.id === activeTripId);
+    if (!trip) return;
+    trip.itinerary = structuredClone(itinerary);
+    trip.seenSpecies = [...seenSpecies];
+    trip.updatedAt = new Date().toISOString();
+    if (lastResultsData) trip.resultsData = structuredClone(lastResultsData);
+    localStorage.setItem("saved-trips", JSON.stringify(trips));
+}
+
+function loadTrip(tripId) {
+    const trip = getSavedTrips().find(t => t.id === tripId);
+    if (!trip) return;
+    activeTripId = trip.id;
+    targetMode = trip.searchParams.targetMode;
+    lifelistSource = trip.searchParams.lifelistSource;
+    listType = trip.searchParams.listType;
+    searchMode = trip.searchParams.searchMode;
+    lastRequestBody = structuredClone(trip.searchParams.lastRequestBody);
+    lifeList = [...(trip.lifeList || [])];
+    selectedSpeciesList = structuredClone(trip.selectedSpeciesList || []);
+    itinerary = structuredClone(trip.itinerary || []);
+    seenSpecies = new Set(trip.seenSpecies || []);
+    lastResultsData = structuredClone(trip.resultsData);
+    excludedLocalityIds = lastRequestBody?.exclude_locality_ids || [];
+    resultsMode = "plan";
+    applySidebarFromTrip(trip);
+    lockSidebar();
+    renderResults(lastResultsData);
+}
+
+function unloadTrip() {
+    activeTripId = null;
+    seenSpecies.clear();
+    unlockSidebar();
+    renderResultsView();
+}
+
+function applySidebarFromTrip(trip) {
+    const body = trip.searchParams.lastRequestBody;
+    if (!body) return;
+
+    // Target mode
+    document.querySelectorAll(".target-mode-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.mode === trip.searchParams.targetMode);
+    });
+    document.getElementById("target-search-inputs").style.display = trip.searchParams.targetMode === "search" ? "" : "none";
+    document.getElementById("target-lifelist-inputs").style.display = trip.searchParams.targetMode === "lifelist" ? "" : "none";
+
+    // Life list source
+    document.querySelectorAll(".lifelist-source-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.source === trip.searchParams.lifelistSource);
+    });
+    document.getElementById("lifelist-upload-inputs").style.display = trip.searchParams.lifelistSource === "upload" ? "" : "none";
+    document.getElementById("lifelist-fresh-inputs").style.display = trip.searchParams.lifelistSource === "fresh" ? "" : "none";
+
+    // List type
+    document.querySelectorAll(".list-type-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.type === trip.searchParams.listType);
+    });
+
+    // Search mode
+    document.querySelectorAll(".search-mode-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.mode === trip.searchParams.searchMode);
+    });
+    document.getElementById("region-inputs").style.display = trip.searchParams.searchMode === "region" ? "" : "none";
+    document.getElementById("driving-inputs").style.display = trip.searchParams.searchMode === "driving" ? "" : "none";
+
+    // Dates
+    if (body.start_date) {
+        const [, sm, sd] = body.start_date.split("-").map(Number);
+        document.getElementById("start-month").value = sm;
+        document.getElementById("start-month").dispatchEvent(new Event("change"));
+        document.getElementById("start-day").value = sd;
+    }
+    if (body.end_date) {
+        const [, em, ed] = body.end_date.split("-").map(Number);
+        document.getElementById("end-month").value = em;
+        document.getElementById("end-month").dispatchEvent(new Event("change"));
+        document.getElementById("end-day").value = ed;
+    }
+
+    // K
+    document.getElementById("k-input").value = body.k || 5;
+
+    // File status hint for uploaded life list
+    if (trip.searchParams.lifelistSource === "upload" && trip.lifeList?.length > 0) {
+        const fileStatus = document.getElementById("file-status");
+        if (fileStatus) {
+            fileStatus.textContent = `${trip.lifeList.length} species on your life list (from saved trip)`;
+            fileStatus.className = "form-hint loaded";
+        }
+    }
+
+    // Species chips for search mode
+    if (trip.searchParams.targetMode === "search" && trip.selectedSpeciesList?.length > 0) {
+        const chipsEl = document.getElementById("species-chips");
+        if (chipsEl) {
+            chipsEl.innerHTML = trip.selectedSpeciesList.map(sp =>
+                `<span class="species-chip">${sp.comName}</span>`
+            ).join("");
+        }
+    }
+
+    // Optimize button text
+    const btn = document.getElementById("optimize-btn");
+    btn.disabled = false;
+    btn.textContent = "Re-optimize Trip";
+}
+
+function lockSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+    const skip = new Set(["optimize-btn", "theme-toggle", "upload-help-btn", "learn-more-btn", "tour-help-btn"]);
+    sidebar.querySelectorAll("input, select, button, .multi-select-display").forEach(el => {
+        if (skip.has(el.id) || el.classList.contains("tour-help-btn") || el.classList.contains("sidebar-toggle")) return;
+        el.disabled = true;
+        el.style.opacity = "0.5";
+        el.style.pointerEvents = "none";
+    });
+    // Keep optimize button active for re-optimization
+    const btn = document.getElementById("optimize-btn");
+    btn.disabled = false;
+    btn.style.opacity = "";
+    btn.style.pointerEvents = "";
+}
+
+function unlockSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+    sidebar.querySelectorAll("input, select, button, .multi-select-display").forEach(el => {
+        el.disabled = false;
+        el.style.opacity = "";
+        el.style.pointerEvents = "";
+    });
+    updateOptimizeBtn();
+}
+
+function saveCurrentTrip(name) {
+    const trip = buildTripSnapshot(name);
+    activeTripId = trip.id;
+    saveTripToStorage(trip);
+    applySidebarFromTrip(trip);
+    lockSidebar();
+    renderResultsView();
+}
+
+function showSaveTripDialog() {
+    const overlay = document.getElementById("save-trip-overlay");
+    const input = document.getElementById("save-trip-name");
+    input.value = "";
+    overlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+    setTimeout(() => input.focus(), 50);
+}
+
+function showLoadTripDialog() {
+    const overlay = document.getElementById("load-trip-overlay");
+    const list = document.getElementById("load-trip-list");
+    const trips = getSavedTrips();
+
+    if (trips.length === 0) {
+        list.innerHTML = '<p style="text-align:center; color: var(--text-secondary); font-size: 0.9rem;">No saved trips yet.</p>';
+    } else {
+        list.innerHTML = trips.map(t => {
+            const dateRange = t.searchParams?.lastRequestBody
+                ? `${t.searchParams.lastRequestBody.start_date?.slice(5)} to ${t.searchParams.lastRequestBody.end_date?.slice(5)}`
+                : "";
+            const geo = t.resultsData?.geographic_filter || "";
+            const subtitle = [geo, dateRange].filter(Boolean).join(" · ");
+            return `
+                <div class="trip-list-item" data-trip-id="${t.id}">
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="trip-list-name">${t.name}</div>
+                        <div class="trip-list-date">${subtitle}</div>
+                    </div>
+                    <div class="trip-list-actions">
+                        <button class="expand-collapse-btn trip-load-btn" data-trip-id="${t.id}">Load</button>
+                        <button class="expand-collapse-btn trip-delete-btn" data-trip-id="${t.id}" style="color: #d32f2f; border-color: #d32f2f;">Delete</button>
+                    </div>
+                </div>
+            `;
+        }).join("");
+    }
+
+    overlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+
+    list.querySelectorAll(".trip-load-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            closeHelpOverlay("load-trip-overlay");
+            loadTrip(btn.dataset.tripId);
+        });
+    });
+    list.querySelectorAll(".trip-delete-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            deleteTripFromStorage(btn.dataset.tripId);
+            showLoadTripDialog(); // refresh list
+        });
+    });
+}
+
+function toggleSeenSpecies(commonName) {
+    if (seenSpecies.has(commonName)) seenSpecies.delete(commonName);
+    else seenSpecies.add(commonName);
+    updateActiveTripState();
+    renderResultsView();
+    updateMap();
+}
 
 const tileSets = {
     light: {
@@ -1171,6 +1444,7 @@ document.getElementById("optimize-btn").addEventListener("click", async () => {
 });
 
 async function runOptimization() {
+    const btnLabel = activeTripId ? "Re-optimize Trip" : "Find Hotspots";
     resultsMode = "explore";
     const btn = document.getElementById("optimize-btn");
     btn.disabled = true;
@@ -1179,7 +1453,7 @@ async function runOptimization() {
     if (targetMode === "search" && selectedSpeciesList.length === 0) {
         alert("Please select at least one species first.");
         btn.disabled = false;
-        btn.textContent = "Find Hotspots";
+        btn.textContent = btnLabel;
         return;
     }
 
@@ -1192,25 +1466,25 @@ async function runOptimization() {
     if (!kInput.value) kInput.value = 5;
 
     if (targetMode === "search") {
-        body.target_species = selectedSpeciesList.map(sp => sp.comName);
+        body.target_species = selectedSpeciesList.map(sp => sp.comName).filter(s => !seenSpecies.has(s));
     } else if (lifelistSource === "fresh") {
-        body.life_list = [];
+        body.life_list = [...seenSpecies];
     } else {
-        body.life_list = lifeList;
+        body.life_list = [...new Set([...lifeList, ...seenSpecies])];
     }
 
     if (searchMode === "driving") {
         if (centerLat == null || centerLon == null) {
             alert("Please select a location first.");
             btn.disabled = false;
-            btn.textContent = "Find Hotspots";
+            btn.textContent = btnLabel;
             return;
         }
         const maxMin = parseInt(document.getElementById("max-driving-minutes").value);
         if (!maxMin || maxMin < 1) {
             alert("Please enter a valid driving time.");
             btn.disabled = false;
-            btn.textContent = "Find Hotspots";
+            btn.textContent = btnLabel;
             return;
         }
         body.center_lat = centerLat;
@@ -1262,6 +1536,7 @@ async function runOptimization() {
         }
         const data = await resp.json();
         renderResults(data);
+        updateActiveTripState();
     } catch (err) {
         const msg = err instanceof TypeError
             ? "Connection lost. Please check your internet and try again."
@@ -1270,7 +1545,7 @@ async function runOptimization() {
             `<div class="empty-state"><p>${msg}</p></div>`;
     } finally {
         btn.disabled = false;
-        btn.textContent = "Find Hotspots";
+        btn.textContent = btnLabel;
     }
 }
 
@@ -1374,12 +1649,12 @@ function updateMap(fitToResults = false) {
         // Compute adjusted ranking by marginal gain accounting for itinerary
         const itinMiss = {};
         itinerary.forEach(h => {
-            h.target_species.forEach(sp => {
+            h.target_species.filter(sp => !seenSpecies.has(sp.common_name)).forEach(sp => {
                 itinMiss[sp.common_name] = (itinMiss[sp.common_name] ?? 1) * (1 - sp.probability);
             });
         });
         const rankedIds = [...lastResultsData.hotspots]
-            .map(h => ({ locality_id: h.locality_id, gain: h.target_species.reduce((sum, sp) => sum + sp.probability * (itinMiss[sp.common_name] ?? 1), 0) }))
+            .map(h => ({ locality_id: h.locality_id, gain: h.target_species.filter(sp => !seenSpecies.has(sp.common_name)).reduce((sum, sp) => sum + sp.probability * (itinMiss[sp.common_name] ?? 1), 0) }))
             .sort((a, b) => b.gain - a.gain);
         const rankMap = {};
         rankedIds.forEach((r, i) => { rankMap[r.locality_id] = i; });
@@ -1554,7 +1829,7 @@ function renderMetrics() {
         const cMiss = {};
         let expectedLifers = 0;
         itinerary.forEach(h => {
-            h.target_species.forEach(sp => {
+            h.target_species.filter(sp => !seenSpecies.has(sp.common_name)).forEach(sp => {
                 const miss = cMiss[sp.common_name] ?? 1;
                 expectedLifers += sp.probability * miss;
                 cMiss[sp.common_name] = miss * (1 - sp.probability);
@@ -1610,7 +1885,7 @@ function renderExploreView() {
     // Cumulative miss probabilities from itinerary
     const itinMiss = {};
     itinerary.forEach(h => {
-        h.target_species.forEach(sp => {
+        h.target_species.filter(sp => !seenSpecies.has(sp.common_name)).forEach(sp => {
             itinMiss[sp.common_name] = (itinMiss[sp.common_name] ?? 1) * (1 - sp.probability);
         });
     });
@@ -1618,7 +1893,7 @@ function renderExploreView() {
     // Compute marginal gains and sort by them
     const ranked = data.hotspots.map(h => ({
         ...h,
-        marginalGainAdj: h.target_species.reduce((sum, sp) => {
+        marginalGainAdj: h.target_species.filter(sp => !seenSpecies.has(sp.common_name)).reduce((sum, sp) => {
             const miss = itinMiss[sp.common_name] ?? 1;
             return sum + sp.probability * miss;
         }, 0),
@@ -1699,6 +1974,7 @@ function renderExploreView() {
                 });
 
                 itinerary.push(hotspot);
+                updateActiveTripState();
                 renderResultsView();
                 updateMap();
 
@@ -1835,6 +2111,7 @@ async function selectHotspotFromSearch(summary) {
 
         if (!itinerary.some(it => it.locality_id === hotspot.locality_id)) {
             itinerary.push(hotspot);
+            updateActiveTripState();
             renderResultsView();
             updateMap();
         }
@@ -1892,6 +2169,56 @@ function wireHotspotSearch() {
     });
 }
 
+function wireTripMenu() {
+    const menuBtn = document.getElementById("trip-menu-btn");
+    const dropdown = document.getElementById("trip-menu-dropdown");
+    if (menuBtn && dropdown) {
+        menuBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const wasOpen = dropdown.classList.contains("open");
+            dropdown.classList.toggle("open");
+            if (!wasOpen) {
+                const closeHandler = () => { dropdown.classList.remove("open"); document.removeEventListener("click", closeHandler); };
+                setTimeout(() => document.addEventListener("click", closeHandler), 0);
+            }
+        });
+    }
+    const saveBtn = document.getElementById("trip-menu-save");
+    if (saveBtn) {
+        saveBtn.addEventListener("click", () => {
+            dropdown.classList.remove("open");
+            if (activeTripId) {
+                updateActiveTripState();
+                renderResultsView();
+            } else {
+                showSaveTripDialog();
+            }
+        });
+    }
+    const loadBtn = document.getElementById("trip-menu-load");
+    if (loadBtn) {
+        loadBtn.addEventListener("click", () => {
+            dropdown.classList.remove("open");
+            showLoadTripDialog();
+        });
+    }
+    const closeBtn = document.getElementById("trip-menu-close");
+    if (closeBtn) {
+        closeBtn.addEventListener("click", () => {
+            dropdown.classList.remove("open");
+            unloadTrip();
+        });
+    }
+    const bannerClose = document.getElementById("trip-banner-close");
+    if (bannerClose) {
+        bannerClose.addEventListener("click", () => unloadTrip());
+    }
+    const reoptBtn = document.getElementById("reoptimize-btn");
+    if (reoptBtn) {
+        reoptBtn.addEventListener("click", () => runOptimization());
+    }
+}
+
 function renderPlanView() {
     const container = document.getElementById("results-view-container");
     const isSearch = targetMode === "search";
@@ -1906,8 +2233,35 @@ function renderPlanView() {
         </div>
     `;
 
+    const tripBannerHtml = activeTripId ? (() => {
+        const trip = getSavedTrips().find(t => t.id === activeTripId);
+        return trip ? `<div class="trip-banner"><span class="trip-banner-name">${trip.name}</span><button class="trip-banner-close" id="trip-banner-close" title="Close trip">&times;</button></div>` : "";
+    })() : "";
+
+    const tripMenuHtml = lastResultsData ? `
+        <div class="trip-menu">
+            <button class="trip-menu-btn" id="trip-menu-btn">Trips &#9662;</button>
+            <div class="trip-menu-dropdown" id="trip-menu-dropdown">
+                <div class="trip-menu-item" id="trip-menu-save">${activeTripId ? "Update Trip" : "Save Trip"}</div>
+                <div class="trip-menu-item" id="trip-menu-load">Load Trip</div>
+                ${activeTripId ? '<div class="trip-menu-item" id="trip-menu-close">Close Trip</div>' : ""}
+            </div>
+        </div>
+    ` : "";
+
+    const reoptBtnHtml = activeTripId && seenSpecies.size > 0
+        ? `<button class="reoptimize-btn" id="reoptimize-btn">Re-optimize</button>`
+        : "";
+
     if (itinerary.length === 0) {
-        container.innerHTML = searchHtml + `<div class="empty-state"><p>Add hotspots from the Explore tab or search above to build your itinerary.</p></div>`;
+        container.innerHTML = `
+            <div class="section-title-row">
+                <div class="section-title">Your Itinerary</div>
+                <div class="expand-collapse-btns">${reoptBtnHtml}${tripMenuHtml}</div>
+            </div>
+            ${tripBannerHtml}
+        ` + searchHtml + `<div class="empty-state"><p>Add hotspots from the Explore tab or search above to build your itinerary.</p></div>`;
+        wireTripMenu();
         wireHotspotSearch();
         updateDrivingTime();
         return;
@@ -1917,10 +2271,13 @@ function renderPlanView() {
         <div class="section-title-row">
             <div class="section-title">Your Itinerary</div>
             <div class="expand-collapse-btns">
+                ${reoptBtnHtml}
                 <button class="expand-collapse-btn" id="expand-all-btn">Expand All</button>
                 <button class="expand-collapse-btn" id="collapse-all-btn">Collapse All</button>
+                ${tripMenuHtml}
             </div>
         </div>
+        ${tripBannerHtml}
     `;
 
     html += searchHtml;
@@ -1930,7 +2287,7 @@ function renderPlanView() {
     const marginalGains = [];
     itinerary.forEach(h => {
         let gain = 0;
-        h.target_species.forEach(sp => {
+        h.target_species.filter(sp => !seenSpecies.has(sp.common_name)).forEach(sp => {
             const miss = cumulativeMiss[sp.common_name] ?? 1;
             gain += sp.probability * miss;
             cumulativeMiss[sp.common_name] = miss * (1 - sp.probability);
@@ -1990,23 +2347,34 @@ function renderPlanView() {
         .filter(sp => sp.probability >= 0.001)
         .sort((a, b) => b.probability - a.probability);
 
+    // Separate seen vs unseen for display ordering
+    const unseenCombined = combinedProbs.filter(sp => !seenSpecies.has(sp.common_name));
+    const seenCombined = combinedProbs.filter(sp => seenSpecies.has(sp.common_name));
+
     if (combinedProbs.length > 0) {
-        const combinedRows = combinedProbs.map(sp => `
-            <tr>
+        const makeCombinedRow = (sp) => {
+            const isSeen = seenSpecies.has(sp.common_name);
+            const seenClass = isSeen ? " species-seen" : "";
+            const seenCol = activeTripId ? `<td style="text-align:center"><button class="seen-toggle${isSeen ? " checked" : ""}" data-species="${sp.common_name}">${isSeen ? "&#10003;" : ""}</button></td>` : "";
+            return `
+            <tr class="${seenClass}">
                 <td>${sp.common_name}</td>
                 <td style="white-space:nowrap">
                     <span class="prob-bar" style="width: ${sp.probability * 100}px"></span>
                     ${(sp.probability * 100).toFixed(1)}%
                 </td>
-            </tr>
-        `).join("");
+                ${seenCol}
+            </tr>`;
+        };
+        const combinedRows = [...unseenCombined, ...seenCombined].map(makeCombinedRow).join("");
+        const seenHeader = activeTripId ? "<th>Seen?</th>" : "";
 
         html += `
             <div class="section-title" style="margin-top: 1.5rem;">All Potential ${isSearch ? "Targets" : "Lifers"}</div>
             <div class="hotspot-card">
                 <div style="padding: 1rem 1.25rem;">
                     <table>
-                        <thead><tr><th>Species</th><th>Combined Probability</th></tr></thead>
+                        <thead><tr><th>Species</th><th>Combined Probability</th>${seenHeader}</tr></thead>
                         <tbody>${combinedRows}</tbody>
                     </table>
                 </div>
@@ -2015,6 +2383,7 @@ function renderPlanView() {
     }
 
     container.innerHTML = html;
+    wireTripMenu();
     wireHotspotSearch();
 
     // Wire up card interactions
@@ -2030,12 +2399,21 @@ function renderPlanView() {
         card.addEventListener("mouseleave", () => highlightHotspot(locId, false));
     });
 
+    // Wire up seen species toggles
+    container.querySelectorAll(".seen-toggle").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleSeenSpecies(btn.dataset.species);
+        });
+    });
+
     // Wire up remove buttons
     container.querySelectorAll(".remove-itinerary-btn").forEach(btn => {
         btn.addEventListener("click", (e) => {
             e.stopPropagation();
             const idx = parseInt(btn.dataset.index);
             itinerary.splice(idx, 1);
+            updateActiveTripState();
             renderPlanView();
             updateMap();
         });
@@ -2172,6 +2550,7 @@ function renderPlanView() {
         if (srcIndex !== dropIndex) {
             const [moved] = itinerary.splice(srcIndex, 1);
             itinerary.splice(dropIndex, 0, moved);
+            updateActiveTripState();
             renderPlanView();
             updateMap();
         }

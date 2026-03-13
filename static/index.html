@@ -205,6 +205,28 @@
         </div>
     </div>
 
+    <div class="help-dialog-overlay" id="save-trip-overlay">
+        <div class="help-dialog" style="max-width: 360px;">
+            <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem;">Save Trip</p>
+            <form id="save-trip-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <input type="text" id="save-trip-name" placeholder="Trip name..."
+                       required style="padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface, var(--input-bg)); color: var(--text); font-size: 1rem;" />
+                <div style="display: flex; gap: 0.5rem; justify-content: center;">
+                    <button type="button" class="help-dialog-close" id="save-trip-cancel" style="background: var(--border); color: var(--text);">Cancel</button>
+                    <button type="submit" class="help-dialog-close" id="save-trip-confirm">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="help-dialog-overlay" id="load-trip-overlay">
+        <div class="help-dialog" style="max-width: 400px; text-align: left;">
+            <p style="font-size: 1.1rem; font-weight: 600; text-align: center; margin-bottom: 0.75rem;">Saved Trips</p>
+            <div id="load-trip-list"></div>
+            <button type="button" class="help-dialog-close" id="load-trip-close" style="display: block; margin: 0.75rem auto 0;">Close</button>
+        </div>
+    </div>
+
     <div class="help-dialog-overlay" id="walkthrough-welcome-overlay">
         <div class="help-dialog" style="max-width: 400px;">
             <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem;">Welcome to fledgling!</p>
