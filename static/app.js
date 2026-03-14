@@ -113,11 +113,75 @@ document.getElementById("save-trip-overlay").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeHelpOverlay("save-trip-overlay");
 });
 
-// Load trip dialog
-document.getElementById("load-trip-close").addEventListener("click", () => closeHelpOverlay("load-trip-overlay"));
-document.getElementById("load-trip-overlay").addEventListener("click", (e) => {
-    if (e.target === e.currentTarget) closeHelpOverlay("load-trip-overlay");
+// Sidebar trip selector dropdown
+const tripSelectDisplay = document.getElementById("trip-select-display");
+const tripSelectDropdown = document.getElementById("trip-select-dropdown");
+const tripSaveBtn = document.getElementById("trip-save-btn");
+
+tripSaveBtn.addEventListener("click", () => {
+    if (activeTripId) {
+        updateActiveTripState();
+    } else {
+        if (!lastResultsData) return;
+        showSaveTripDialog();
+    }
 });
+
+tripSelectDisplay.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const wasOpen = tripSelectDropdown.classList.contains("open");
+    tripSelectDropdown.classList.toggle("open");
+    if (!wasOpen) {
+        populateTripSelect();
+        const closeHandler = () => { tripSelectDropdown.classList.remove("open"); document.removeEventListener("click", closeHandler); };
+        setTimeout(() => document.addEventListener("click", closeHandler), 0);
+    }
+});
+
+function populateTripSelect() {
+    const trips = getSavedTrips();
+    let html = `<div class="trip-select-item${!activeTripId ? " selected" : ""}" data-action="new">New Trip</div>`;
+    trips.forEach(t => {
+        const selected = activeTripId === t.id ? " selected" : "";
+        html += `<div class="trip-select-item${selected}" data-trip-id="${t.id}">
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.name}</span>
+            <button class="trip-select-delete" data-trip-id="${t.id}" title="Delete trip">&times;</button>
+        </div>`;
+    });
+    tripSelectDropdown.innerHTML = html;
+
+    tripSelectDropdown.querySelectorAll(".trip-select-item").forEach(item => {
+        item.addEventListener("click", (e) => {
+            if (e.target.closest(".trip-select-delete")) return;
+            e.stopPropagation();
+            tripSelectDropdown.classList.remove("open");
+            if (item.dataset.action === "new") {
+                if (activeTripId) unloadTrip();
+            } else {
+                loadTrip(item.dataset.tripId);
+            }
+            updateTripSelectDisplay();
+        });
+    });
+
+    tripSelectDropdown.querySelectorAll(".trip-select-delete").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteTripFromStorage(btn.dataset.tripId);
+            populateTripSelect();
+            updateTripSelectDisplay();
+        });
+    });
+}
+
+function updateTripSelectDisplay() {
+    if (activeTripId) {
+        const trip = getSavedTrips().find(t => t.id === activeTripId);
+        tripSelectDisplay.textContent = trip ? trip.name : "New Trip";
+    } else {
+        tripSelectDisplay.textContent = "New Trip";
+    }
+}
 
 // ── Saved Trips ──
 
@@ -191,6 +255,7 @@ function loadTrip(tripId) {
     resultsMode = "plan";
     applySidebarFromTrip(trip);
     lockSidebar();
+    updateTripSelectDisplay();
     renderResults(lastResultsData);
 }
 
@@ -198,6 +263,7 @@ function unloadTrip() {
     activeTripId = null;
     seenSpecies.clear();
     unlockSidebar();
+    updateTripSelectDisplay();
     renderResultsView();
 }
 
@@ -275,8 +341,8 @@ function applySidebarFromTrip(trip) {
 
 function lockSidebar() {
     const sidebar = document.querySelector(".sidebar");
-    const skip = new Set(["optimize-btn", "theme-toggle", "upload-help-btn", "learn-more-btn", "tour-help-btn"]);
-    sidebar.querySelectorAll("input, select, button, .multi-select-display").forEach(el => {
+    const skip = new Set(["optimize-btn", "theme-toggle", "upload-help-btn", "learn-more-btn", "tour-help-btn", "trip-select-display", "trip-save-btn"]);
+    sidebar.querySelectorAll("input, select, button, .multi-select-display, .trip-select-display").forEach(el => {
         if (skip.has(el.id) || el.classList.contains("tour-help-btn") || el.classList.contains("sidebar-toggle")) return;
         el.disabled = true;
         el.style.opacity = "0.5";
@@ -291,7 +357,7 @@ function lockSidebar() {
 
 function unlockSidebar() {
     const sidebar = document.querySelector(".sidebar");
-    sidebar.querySelectorAll("input, select, button, .multi-select-display").forEach(el => {
+    sidebar.querySelectorAll("input, select, button, .multi-select-display, .trip-select-display").forEach(el => {
         el.disabled = false;
         el.style.opacity = "";
         el.style.pointerEvents = "";
@@ -305,6 +371,7 @@ function saveCurrentTrip(name) {
     saveTripToStorage(trip);
     applySidebarFromTrip(trip);
     lockSidebar();
+    updateTripSelectDisplay();
     renderResultsView();
 }
 
@@ -315,52 +382,6 @@ function showSaveTripDialog() {
     overlay.classList.add("open");
     document.body.style.overflow = "hidden";
     setTimeout(() => input.focus(), 50);
-}
-
-function showLoadTripDialog() {
-    const overlay = document.getElementById("load-trip-overlay");
-    const list = document.getElementById("load-trip-list");
-    const trips = getSavedTrips();
-
-    if (trips.length === 0) {
-        list.innerHTML = '<p style="text-align:center; color: var(--text-secondary); font-size: 0.9rem;">No saved trips yet.</p>';
-    } else {
-        list.innerHTML = trips.map(t => {
-            const dateRange = t.searchParams?.lastRequestBody
-                ? `${t.searchParams.lastRequestBody.start_date?.slice(5)} to ${t.searchParams.lastRequestBody.end_date?.slice(5)}`
-                : "";
-            const geo = t.resultsData?.geographic_filter || "";
-            const subtitle = [geo, dateRange].filter(Boolean).join(" · ");
-            return `
-                <div class="trip-list-item" data-trip-id="${t.id}">
-                    <div style="flex: 1; min-width: 0;">
-                        <div class="trip-list-name">${t.name}</div>
-                        <div class="trip-list-date">${subtitle}</div>
-                    </div>
-                    <div class="trip-list-actions">
-                        <button class="expand-collapse-btn trip-load-btn" data-trip-id="${t.id}">Load</button>
-                        <button class="expand-collapse-btn trip-delete-btn" data-trip-id="${t.id}" style="color: #d32f2f; border-color: #d32f2f;">Delete</button>
-                    </div>
-                </div>
-            `;
-        }).join("");
-    }
-
-    overlay.classList.add("open");
-    document.body.style.overflow = "hidden";
-
-    list.querySelectorAll(".trip-load-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-            closeHelpOverlay("load-trip-overlay");
-            loadTrip(btn.dataset.tripId);
-        });
-    });
-    list.querySelectorAll(".trip-delete-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-            deleteTripFromStorage(btn.dataset.tripId);
-            showLoadTripDialog(); // refresh list
-        });
-    });
 }
 
 function toggleSeenSpecies(commonName) {
@@ -2169,56 +2190,6 @@ function wireHotspotSearch() {
     });
 }
 
-function wireTripMenu() {
-    const menuBtn = document.getElementById("trip-menu-btn");
-    const dropdown = document.getElementById("trip-menu-dropdown");
-    if (menuBtn && dropdown) {
-        menuBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const wasOpen = dropdown.classList.contains("open");
-            dropdown.classList.toggle("open");
-            if (!wasOpen) {
-                const closeHandler = () => { dropdown.classList.remove("open"); document.removeEventListener("click", closeHandler); };
-                setTimeout(() => document.addEventListener("click", closeHandler), 0);
-            }
-        });
-    }
-    const saveBtn = document.getElementById("trip-menu-save");
-    if (saveBtn) {
-        saveBtn.addEventListener("click", () => {
-            dropdown.classList.remove("open");
-            if (activeTripId) {
-                updateActiveTripState();
-                renderResultsView();
-            } else {
-                showSaveTripDialog();
-            }
-        });
-    }
-    const loadBtn = document.getElementById("trip-menu-load");
-    if (loadBtn) {
-        loadBtn.addEventListener("click", () => {
-            dropdown.classList.remove("open");
-            showLoadTripDialog();
-        });
-    }
-    const closeBtn = document.getElementById("trip-menu-close");
-    if (closeBtn) {
-        closeBtn.addEventListener("click", () => {
-            dropdown.classList.remove("open");
-            unloadTrip();
-        });
-    }
-    const bannerClose = document.getElementById("trip-banner-close");
-    if (bannerClose) {
-        bannerClose.addEventListener("click", () => unloadTrip());
-    }
-    const reoptBtn = document.getElementById("reoptimize-btn");
-    if (reoptBtn) {
-        reoptBtn.addEventListener("click", () => runOptimization());
-    }
-}
-
 function renderPlanView() {
     const container = document.getElementById("results-view-container");
     const isSearch = targetMode === "search";
@@ -2233,35 +2204,8 @@ function renderPlanView() {
         </div>
     `;
 
-    const tripBannerHtml = activeTripId ? (() => {
-        const trip = getSavedTrips().find(t => t.id === activeTripId);
-        return trip ? `<div class="trip-banner"><span class="trip-banner-name">${trip.name}</span><button class="trip-banner-close" id="trip-banner-close" title="Close trip">&times;</button></div>` : "";
-    })() : "";
-
-    const tripMenuHtml = lastResultsData ? `
-        <div class="trip-menu">
-            <button class="trip-menu-btn" id="trip-menu-btn">Trips &#9662;</button>
-            <div class="trip-menu-dropdown" id="trip-menu-dropdown">
-                <div class="trip-menu-item" id="trip-menu-save">${activeTripId ? "Update Trip" : "Save Trip"}</div>
-                <div class="trip-menu-item" id="trip-menu-load">Load Trip</div>
-                ${activeTripId ? '<div class="trip-menu-item" id="trip-menu-close">Close Trip</div>' : ""}
-            </div>
-        </div>
-    ` : "";
-
-    const reoptBtnHtml = activeTripId && seenSpecies.size > 0
-        ? `<button class="reoptimize-btn" id="reoptimize-btn">Re-optimize</button>`
-        : "";
-
     if (itinerary.length === 0) {
-        container.innerHTML = `
-            <div class="section-title-row">
-                <div class="section-title">Your Itinerary</div>
-                <div class="expand-collapse-btns">${reoptBtnHtml}${tripMenuHtml}</div>
-            </div>
-            ${tripBannerHtml}
-        ` + searchHtml + `<div class="empty-state"><p>Add hotspots from the Explore tab or search above to build your itinerary.</p></div>`;
-        wireTripMenu();
+        container.innerHTML = searchHtml + `<div class="empty-state"><p>Add hotspots from the Explore tab or search above to build your itinerary.</p></div>`;
         wireHotspotSearch();
         updateDrivingTime();
         return;
@@ -2271,13 +2215,10 @@ function renderPlanView() {
         <div class="section-title-row">
             <div class="section-title">Your Itinerary</div>
             <div class="expand-collapse-btns">
-                ${reoptBtnHtml}
                 <button class="expand-collapse-btn" id="expand-all-btn">Expand All</button>
                 <button class="expand-collapse-btn" id="collapse-all-btn">Collapse All</button>
-                ${tripMenuHtml}
             </div>
         </div>
-        ${tripBannerHtml}
     `;
 
     html += searchHtml;
@@ -2383,7 +2324,6 @@ function renderPlanView() {
     }
 
     container.innerHTML = html;
-    wireTripMenu();
     wireHotspotSearch();
 
     // Wire up card interactions
