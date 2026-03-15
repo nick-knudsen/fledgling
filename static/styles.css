@@ -56,7 +56,8 @@ html[data-theme="dark"] .logo-light { display: none; }
     white-space: nowrap; flex-shrink: 0;
     transition: background 0.15s;
 }
-.trip-save-btn:hover { background: var(--accent-hover); }
+.trip-save-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.trip-save-btn:disabled { background: var(--disabled); border-color: var(--disabled); cursor: not-allowed; }
 .trip-select-display {
     width: 100%; padding: 0.5rem 0.75rem; padding-right: 2rem;
     border: 1px solid var(--input-border); border-radius: 6px;

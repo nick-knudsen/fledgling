@@ -56,6 +56,7 @@ let hotspotSearchTimeout = null;
 let activeHotspotSearchIndex = -1;
 let activeTripId = null;
 let seenSpecies = new Set();
+let tripDirty = false;
 
 applyTheme(getSystemTheme());
 
@@ -118,13 +119,22 @@ const tripSelectDisplay = document.getElementById("trip-select-display");
 const tripSelectDropdown = document.getElementById("trip-select-dropdown");
 const tripSaveBtn = document.getElementById("trip-save-btn");
 
+function markTripDirty() {
+    tripDirty = true;
+    tripSaveBtn.disabled = false;
+}
+
+tripSaveBtn.disabled = true;
 tripSaveBtn.addEventListener("click", () => {
+    if (!tripDirty) return;
     if (activeTripId) {
         updateActiveTripState();
     } else {
         if (!lastResultsData) return;
         showSaveTripDialog();
     }
+    tripDirty = false;
+    tripSaveBtn.disabled = true;
 });
 
 tripSelectDisplay.addEventListener("click", (e) => {
@@ -240,6 +250,8 @@ function updateActiveTripState() {
 function loadTrip(tripId) {
     const trip = getSavedTrips().find(t => t.id === tripId);
     if (!trip) return;
+    tripDirty = false;
+    tripSaveBtn.disabled = true;
     activeTripId = trip.id;
     targetMode = trip.searchParams.targetMode;
     lifelistSource = trip.searchParams.lifelistSource;
@@ -262,6 +274,8 @@ function loadTrip(tripId) {
 function unloadTrip() {
     activeTripId = null;
     seenSpecies.clear();
+    tripDirty = false;
+    tripSaveBtn.disabled = true;
     unlockSidebar();
     updateTripSelectDisplay();
     renderResultsView();
@@ -369,6 +383,8 @@ function saveCurrentTrip(name) {
     const trip = buildTripSnapshot(name);
     activeTripId = trip.id;
     saveTripToStorage(trip);
+    tripDirty = false;
+    tripSaveBtn.disabled = true;
     applySidebarFromTrip(trip);
     lockSidebar();
     updateTripSelectDisplay();
@@ -387,7 +403,7 @@ function showSaveTripDialog() {
 function toggleSeenSpecies(commonName) {
     if (seenSpecies.has(commonName)) seenSpecies.delete(commonName);
     else seenSpecies.add(commonName);
-    updateActiveTripState();
+    markTripDirty();
     renderResultsView();
     updateMap();
 }
@@ -1557,7 +1573,7 @@ async function runOptimization() {
         }
         const data = await resp.json();
         renderResults(data);
-        updateActiveTripState();
+        markTripDirty();
     } catch (err) {
         const msg = err instanceof TypeError
             ? "Connection lost. Please check your internet and try again."
@@ -1995,7 +2011,7 @@ function renderExploreView() {
                 });
 
                 itinerary.push(hotspot);
-                updateActiveTripState();
+                markTripDirty();
                 renderResultsView();
                 updateMap();
 
@@ -2132,7 +2148,7 @@ async function selectHotspotFromSearch(summary) {
 
         if (!itinerary.some(it => it.locality_id === hotspot.locality_id)) {
             itinerary.push(hotspot);
-            updateActiveTripState();
+            markTripDirty();
             renderResultsView();
             updateMap();
         }
@@ -2353,7 +2369,7 @@ function renderPlanView() {
             e.stopPropagation();
             const idx = parseInt(btn.dataset.index);
             itinerary.splice(idx, 1);
-            updateActiveTripState();
+            markTripDirty();
             renderPlanView();
             updateMap();
         });
@@ -2490,7 +2506,7 @@ function renderPlanView() {
         if (srcIndex !== dropIndex) {
             const [moved] = itinerary.splice(srcIndex, 1);
             itinerary.splice(dropIndex, 0, moved);
-            updateActiveTripState();
+            markTripDirty();
             renderPlanView();
             updateMap();
         }
