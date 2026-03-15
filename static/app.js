@@ -55,6 +55,13 @@ document.getElementById("upload-help-overlay").addEventListener("click", (e) => 
     if (e.target === e.currentTarget) closeHelpOverlay("upload-help-overlay");
 });
 
+// Discord dialog
+document.getElementById("discord-btn").addEventListener("click", () => openHelpOverlay("discord-overlay"));
+document.getElementById("discord-close").addEventListener("click", () => closeHelpOverlay("discord-overlay"));
+document.getElementById("discord-overlay").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeHelpOverlay("discord-overlay");
+});
+
 // Learn More dialog
 let learnMoreRendered = false;
 document.getElementById("learn-more-btn").addEventListener("click", () => {
@@ -323,7 +330,7 @@ function applySidebarFromTrip(trip) {
 
 function lockSidebar() {
     const sidebar = document.querySelector(".sidebar");
-    const skip = new Set(["optimize-btn", "theme-toggle", "upload-help-btn", "learn-more-btn", "tour-help-btn", "trip-select-display", "trip-save-btn"]);
+    const skip = new Set(["optimize-btn", "theme-toggle", "upload-help-btn", "learn-more-btn", "tour-help-btn", "discord-btn", "trip-select-display", "trip-save-btn"]);
     sidebar.querySelectorAll("input, select, button, .multi-select-display, .trip-select-display").forEach(el => {
         if (skip.has(el.id) || el.classList.contains("tour-help-btn") || el.classList.contains("sidebar-toggle")) return;
         el.disabled = true;
