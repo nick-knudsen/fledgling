@@ -2807,6 +2807,12 @@ speciesInput.addEventListener("focus", () => {
             prefer: "left"
         },
         {
+            selector: "#trip-save-btn",
+            title: "Save Your Trip",
+            desc: "Save your itinerary as a named trip. Load it later to track species seen and re-optimize on the go.",
+            prefer: "right"
+        },
+        {
             selector: "#map",
             title: "Interactive Map",
             desc: "Hotspots appear on the map with ranked markers. Click a marker to jump to that hotspot's card.",
@@ -2814,7 +2820,7 @@ speciesInput.addEventListener("focus", () => {
         },
         {
             selector: "#theme-toggle",
-            title: "Dark Mode",
+            title: "Theme Switch",
             desc: "Toggle between light and dark themes.",
             prefer: "right"
         },
