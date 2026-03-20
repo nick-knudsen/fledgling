@@ -6,6 +6,7 @@ function getSystemTheme() {
 function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
     updateMapTiles();
+    updateSelectionMapTiles();
 }
 
 let lifeList = [];
@@ -400,6 +401,193 @@ function updateMapTiles() {
     tileLayer.setUrl(tileSets[theme].url);
 }
 
+// Selection map (always visible in main area for region picking)
+let selectionMap = null;
+let selectionTileLayer = null;
+let countryGeoLayer = null;
+let mapSelectMode = false;
+let ebirdCodeByLayer = new Map(); // L.layer -> eBird country code
+let layerByEbirdCode = new Map(); // eBird country code -> L.layer
+
+function getSelectionMapStyle(selected) {
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    if (selected) {
+        return {
+            fillColor: isDark ? "#5b9cf6" : "#1a73e8",
+            fillOpacity: 0.3,
+            color: isDark ? "#5b9cf6" : "#1a73e8",
+            weight: 2,
+            opacity: 0.8,
+        };
+    }
+    return {
+        fillColor: "transparent",
+        fillOpacity: 0,
+        color: isDark ? "#555" : "#ccc",
+        weight: 1,
+        opacity: mapSelectMode ? 0.6 : 0.3,
+    };
+}
+
+function initSelectionMap() {
+    const container = document.getElementById("selection-map");
+    if (!container || selectionMap) return;
+
+    selectionMap = L.map("selection-map", {
+        preferCanvas: true,
+        zoomControl: true,
+        attributionControl: false,
+    });
+    selectionMap.setView([20, 0], 2);
+
+    const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    const tiles = tileSets[theme];
+    selectionTileLayer = L.tileLayer(tiles.url, { attribution: tiles.attribution }).addTo(selectionMap);
+
+    // Load country boundaries
+    fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+        .then(r => r.json())
+        .then(topo => {
+            const geojson = topojson.feature(topo, topo.objects.countries);
+            // world-atlas uses UN M49 numeric IDs — build mapping to ISO alpha-2
+            const m49ToIso = buildM49ToIsoMapping();
+            countryGeoLayer = L.geoJSON(geojson, {
+                style: (feature) => {
+                    const code = m49ToIso[feature.id];
+                    const selected = code && selectedCountries.has(code);
+                    return getSelectionMapStyle(selected);
+                },
+                onEachFeature: (feature, layer) => {
+                    const code = m49ToIso[feature.id];
+                    if (code) {
+                        ebirdCodeByLayer.set(layer, code);
+                        layerByEbirdCode.set(code, layer);
+                    }
+                    layer.on("click", () => onCountryLayerClick(layer));
+                    layer.on("mouseover", () => {
+                        if (!mapSelectMode) return;
+                        const c = ebirdCodeByLayer.get(layer);
+                        if (c && !selectedCountries.has(c)) {
+                            layer.setStyle({ fillColor: "#888", fillOpacity: 0.15 });
+                        }
+                    });
+                    layer.on("mouseout", () => {
+                        if (!mapSelectMode) return;
+                        const c = ebirdCodeByLayer.get(layer);
+                        if (c && !selectedCountries.has(c)) {
+                            layer.setStyle(getSelectionMapStyle(false));
+                        }
+                    });
+                },
+            }).addTo(selectionMap);
+        });
+}
+
+function buildM49ToIsoMapping() {
+    // UN M49 numeric codes to ISO 3166-1 alpha-2 (eBird country codes)
+    // Covers all countries with eBird hotspot data
+    return {
+        "4": "AF", "8": "AL", "12": "DZ", "16": "AS", "20": "AD",
+        "24": "AO", "28": "AG", "32": "AR", "36": "AU", "40": "AT",
+        "31": "AZ", "44": "BS", "48": "BH", "50": "BD", "51": "AM",
+        "52": "BB", "56": "BE", "60": "BM", "64": "BT", "68": "BO",
+        "70": "BA", "72": "BW", "76": "BR", "84": "BZ", "90": "SB",
+        "92": "VG", "96": "BN", "100": "BG", "104": "MM", "108": "BI",
+        "112": "BY", "116": "KH", "120": "CM", "124": "CA", "132": "CV",
+        "136": "KY", "140": "CF", "144": "LK", "148": "TD", "152": "CL",
+        "156": "CN", "158": "TW", "162": "CX", "166": "CC", "170": "CO",
+        "174": "KM", "175": "YT", "178": "CG", "180": "CD", "184": "CK",
+        "188": "CR", "191": "HR", "192": "CU", "196": "CY", "203": "CZ",
+        "204": "BJ", "208": "DK", "212": "DM", "214": "DO", "218": "EC",
+        "222": "SV", "226": "GQ", "231": "ET", "232": "ER", "233": "EE",
+        "234": "FO", "238": "FK", "242": "FJ", "246": "FI", "248": "AX",
+        "250": "FR", "254": "GF", "258": "PF", "260": "TF", "262": "DJ",
+        "266": "GA", "268": "GE", "270": "GM", "275": "PS", "276": "DE",
+        "288": "GH", "292": "GI", "296": "KI", "300": "GR", "304": "GL",
+        "308": "GD", "312": "GP", "316": "GU", "320": "GT", "324": "GN",
+        "328": "GY", "332": "HT", "336": "VA", "340": "HN", "344": "HK",
+        "348": "HU", "352": "IS", "356": "IN", "360": "ID", "364": "IR",
+        "368": "IQ", "372": "IE", "376": "IL", "380": "IT", "384": "CI",
+        "388": "JM", "392": "JP", "398": "KZ", "400": "JO", "404": "KE",
+        "408": "KP", "410": "KR", "414": "KW", "417": "KG", "418": "LA",
+        "422": "LB", "426": "LS", "428": "LV", "430": "LR", "434": "LY",
+        "438": "LI", "440": "LT", "442": "LU", "446": "MO", "450": "MG",
+        "454": "MW", "458": "MY", "462": "MV", "466": "ML", "470": "MT",
+        "474": "MQ", "478": "MR", "480": "MU", "484": "MX", "492": "MC",
+        "496": "MN", "498": "MD", "499": "ME", "500": "MS", "504": "MA",
+        "508": "MZ", "512": "OM", "516": "NA", "520": "NR", "524": "NP",
+        "528": "NL", "531": "CW", "533": "AW", "534": "SX", "535": "BQ",
+        "540": "NC", "548": "VU", "554": "NZ", "558": "NI", "562": "NE",
+        "566": "NG", "570": "NU", "574": "NF", "578": "NO", "580": "MP",
+        "581": "UM", "583": "FM", "584": "MH", "585": "PW", "586": "PK",
+        "591": "PA", "598": "PG", "600": "PY", "604": "PE", "608": "PH",
+        "612": "PN", "616": "PL", "620": "PT", "624": "GW", "626": "TL",
+        "630": "PR", "634": "QA", "638": "RE", "642": "RO", "643": "RU",
+        "646": "RW", "652": "BL", "654": "SH", "659": "KN", "660": "AI",
+        "662": "LC", "663": "MF", "666": "PM", "670": "VC", "674": "SM",
+        "678": "ST", "682": "SA", "686": "SN", "688": "RS", "690": "SC",
+        "694": "SL", "702": "SG", "703": "SK", "704": "VN", "705": "SI",
+        "706": "SO", "710": "ZA", "716": "ZW", "724": "ES", "728": "SS",
+        "729": "SD", "732": "EH", "740": "SR", "744": "SJ", "748": "SZ",
+        "752": "SE", "756": "CH", "760": "SY", "762": "TJ", "764": "TH",
+        "768": "TG", "772": "TK", "776": "TO", "780": "TT", "784": "AE",
+        "788": "TN", "792": "TR", "795": "TM", "796": "TC", "798": "TV",
+        "800": "UG", "804": "UA", "807": "MK", "818": "EG", "826": "GB",
+        "831": "GG", "832": "JE", "833": "IM", "834": "TZ", "840": "US",
+        "850": "VI", "854": "BF", "858": "UY", "860": "UZ", "862": "VE",
+        "876": "WF", "882": "WS", "887": "YE", "894": "ZM",
+        "-99": null, "10": "AQ",
+    };
+}
+
+function onCountryLayerClick(layer) {
+    if (!mapSelectMode) return;
+    const code = ebirdCodeByLayer.get(layer);
+    if (!code || !searchAreas[code]) return;
+
+    if (selectedCountries.has(code)) {
+        selectedCountries.delete(code);
+    } else {
+        selectedCountries.add(code);
+    }
+    layer.setStyle(getSelectionMapStyle(selectedCountries.has(code)));
+
+    // Sync dropdowns
+    populateMultiSelect("country", Object.keys(searchAreas).sort(), selectedCountries, onCountryChange);
+    updateMultiSelectDisplay("country", selectedCountries, "World (all countries)");
+    onCountryChange();
+    updateOptimizeBtn();
+}
+
+function syncSelectionMap() {
+    if (!countryGeoLayer) return;
+    countryGeoLayer.eachLayer(layer => {
+        const code = ebirdCodeByLayer.get(layer);
+        if (code) {
+            layer.setStyle(getSelectionMapStyle(selectedCountries.has(code)));
+        }
+    });
+}
+
+function updateSelectionMapTiles() {
+    if (!selectionMap || !selectionTileLayer) return;
+    const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    selectionTileLayer.setUrl(tileSets[theme].url);
+    // Refresh polygon styles for theme change
+    syncSelectionMap();
+}
+
+// Toggle map select mode
+document.getElementById("map-select-toggle").addEventListener("click", () => {
+    mapSelectMode = !mapSelectMode;
+    document.getElementById("map-select-toggle").classList.toggle("active", mapSelectMode);
+    // Update polygon styles to show borders more/less prominently
+    syncSelectionMap();
+});
+
+// Initialize the selection map on page load
+initSelectionMap();
+
 // Target species mode toggle (search / lifelist)
 let targetMode = "lifelist"; // "search" or "lifelist"
 let lifelistSource = "fresh"; // "upload" or "fresh"
@@ -534,6 +722,7 @@ function onCountryChange() {
     selectedCounties.clear();
     refreshStateDropdown();
     refreshCountyDropdown();
+    syncSelectionMap();
 }
 
 function onStateChange() {
@@ -926,6 +1115,7 @@ function selectAreaRegion(region) {
     updateMultiSelectDisplay("country", selectedCountries, "World (all countries)");
     refreshStateDropdown();
     refreshCountyDropdown();
+    syncSelectionMap();
 }
 
 // Scope region search
@@ -1564,6 +1754,10 @@ async function runOptimization() {
 function renderResults(data) {
     const el = document.getElementById("results");
     lastResultsData = data;
+
+    // Hide selection map when showing results
+    const selMapContainer = document.getElementById("selection-map-container");
+    if (selMapContainer) selMapContainer.style.display = "none";
 
     const isSearch = targetMode === "search";
     const noun = (!isSearch && listType === "life") ? "lifers" : "targets";
@@ -2851,8 +3045,9 @@ speciesInput.addEventListener("focus", () => {
         if (map) { map.remove(); map = null; }
         markers = {};
         clearRoute();
-        document.getElementById("results").innerHTML =
-            '<div class="empty-state"><p>Select your search parameters to get started.</p></div>';
+        document.getElementById("results").innerHTML = "";
+        const selMapContainer = document.getElementById("selection-map-container");
+        if (selMapContainer) selMapContainer.style.display = "";
     }
 
     function endWalkthrough() {

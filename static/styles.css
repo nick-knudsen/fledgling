@@ -320,6 +320,21 @@ button.primary:disabled { background: var(--disabled); cursor: not-allowed; }
 .leaflet-bar a:hover { background-color: var(--hover) !important; }
 .leaflet-bar { border-color: var(--border) !important; }
 
+/* Selection map (always visible in main area) */
+#selection-map-container { padding-top: 1.5rem; }
+#selection-map { height: 400px; border-radius: 8px; border: 1px solid var(--border); }
+
+/* Map select toggle button in region search row */
+.region-search-row {
+    display: flex; gap: 0;
+}
+.region-search-row input {
+    flex: 1; min-width: 0;
+    border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important;
+    border-right: none !important;
+}
+#map-select-toggle.active { color: var(--accent); border-color: var(--accent); background: var(--hover); }
+
 .hotspot-card {
     background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px;
     margin-bottom: 1rem; overflow: hidden; transition: border-color 0.15s ease;
@@ -735,6 +750,8 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
     /* Prevent iOS Safari auto-zoom on input focus */
     input, select, .multi-select-display { font-size: 16px; }
     .main { padding: 0 1rem 1.5rem; scroll-padding-top: calc(250px + 1rem); }
+    #selection-map-container { padding-top: 1rem; }
+    #selection-map { height: 250px; }
     .results-map { padding-top: 1rem; }
     #map { height: 250px; }
     .metrics { flex-direction: column; gap: 0.5rem; }
@@ -770,4 +787,5 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
         position: sticky; top: 0; align-self: flex-start;
     }
     .results-map #map { height: calc(100vh - 3rem); margin-bottom: 0; }
+    #selection-map { height: calc(100vh - 3rem); }
 }
