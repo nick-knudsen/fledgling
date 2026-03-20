@@ -647,6 +647,21 @@ html[data-theme="dark"] .remove-itinerary-btn:hover { border-color: #ef5350; col
     font-size: 0.75rem; font-weight: 600; line-height: 1; flex-shrink: 0;
 }
 
+/* Buy Me a Coffee button — compact */
+.bmc-wrapper { display: flex; align-items: center; flex-shrink: 0; }
+.bmc-wrapper .bmc-btn {
+    padding: 3px 8px !important;
+    min-height: 0 !important;
+    height: auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    border-radius: 5px !important;
+    background-color: var(--accent) !important;
+}
+.bmc-wrapper .bmc-btn:hover { background-color: var(--accent-hover) !important; }
+.bmc-wrapper .bmc-btn img { height: 16px !important; width: auto !important; margin-bottom: 0 !important; }
+.bmc-wrapper .bmc-btn-text { font-size: 20px !important; }
+
 /* Seen species */
 .species-seen td:first-child { text-decoration: line-through; color: var(--text-secondary); }
 .species-seen .prob-bar { opacity: 0.3; }
