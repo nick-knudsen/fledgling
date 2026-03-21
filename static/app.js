@@ -433,54 +433,60 @@ function initSelectionMap() {
     const container = document.getElementById("selection-map");
     if (!container || selectionMap) return;
 
-    selectionMap = L.map("selection-map", {
-        preferCanvas: true,
-        zoomControl: true,
-        attributionControl: false,
-    });
-    selectionMap.setView([20, 0], 2);
-
-    const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-    const tiles = tileSets[theme];
-    selectionTileLayer = L.tileLayer(tiles.url, { attribution: tiles.attribution }).addTo(selectionMap);
-
-    // Load country boundaries
-    fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
-        .then(r => r.json())
-        .then(topo => {
-            const geojson = topojson.feature(topo, topo.objects.countries);
-            // world-atlas uses UN M49 numeric IDs — build mapping to ISO alpha-2
-            const m49ToIso = buildM49ToIsoMapping();
-            countryGeoLayer = L.geoJSON(geojson, {
-                style: (feature) => {
-                    const code = m49ToIso[feature.id];
-                    const selected = code && selectedCountries.has(code);
-                    return getSelectionMapStyle(selected);
-                },
-                onEachFeature: (feature, layer) => {
-                    const code = m49ToIso[feature.id];
-                    if (code) {
-                        ebirdCodeByLayer.set(layer, code);
-                        layerByEbirdCode.set(code, layer);
-                    }
-                    layer.on("click", () => onCountryLayerClick(layer));
-                    layer.on("mouseover", () => {
-                        if (!mapSelectMode) return;
-                        const c = ebirdCodeByLayer.get(layer);
-                        if (c && !selectedCountries.has(c)) {
-                            layer.setStyle({ fillColor: "#888", fillOpacity: 0.15 });
-                        }
-                    });
-                    layer.on("mouseout", () => {
-                        if (!mapSelectMode) return;
-                        const c = ebirdCodeByLayer.get(layer);
-                        if (c && !selectedCountries.has(c)) {
-                            layer.setStyle(getSelectionMapStyle(false));
-                        }
-                    });
-                },
-            }).addTo(selectionMap);
+    try {
+        selectionMap = L.map("selection-map", {
+            preferCanvas: true,
+            zoomControl: true,
+            attributionControl: false,
         });
+        selectionMap.setView([20, 0], 2);
+
+        const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+        const tiles = tileSets[theme];
+        selectionTileLayer = L.tileLayer(tiles.url, { attribution: tiles.attribution }).addTo(selectionMap);
+
+        // Load country boundaries
+        fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+            .then(r => r.json())
+            .then(topo => {
+                const geojson = topojson.feature(topo, topo.objects.countries);
+                // world-atlas uses UN M49 numeric IDs — build mapping to ISO alpha-2
+                const m49ToIso = buildM49ToIsoMapping();
+                countryGeoLayer = L.geoJSON(geojson, {
+                    style: (feature) => {
+                        const code = m49ToIso[feature.id];
+                        const selected = code && selectedCountries.has(code);
+                        return getSelectionMapStyle(selected);
+                    },
+                    onEachFeature: (feature, layer) => {
+                        const code = m49ToIso[feature.id];
+                        if (code) {
+                            ebirdCodeByLayer.set(layer, code);
+                            layerByEbirdCode.set(code, layer);
+                        }
+                        layer.on("click", () => onCountryLayerClick(layer));
+                        layer.on("mouseover", () => {
+                            if (!mapSelectMode) return;
+                            const c = ebirdCodeByLayer.get(layer);
+                            if (c && !selectedCountries.has(c)) {
+                                layer.setStyle({ fillColor: "#888", fillOpacity: 0.15 });
+                            }
+                        });
+                        layer.on("mouseout", () => {
+                            if (!mapSelectMode) return;
+                            const c = ebirdCodeByLayer.get(layer);
+                            if (c && !selectedCountries.has(c)) {
+                                layer.setStyle(getSelectionMapStyle(false));
+                            }
+                        });
+                    },
+                }).addTo(selectionMap);
+            });
+    } catch (e) {
+        console.error("Failed to initialize selection map:", e);
+        selectionMap = null;
+        selectionTileLayer = null;
+    }
 }
 
 function buildM49ToIsoMapping() {
@@ -585,8 +591,8 @@ document.getElementById("map-select-toggle").addEventListener("click", () => {
     syncSelectionMap();
 });
 
-// Initialize the selection map on page load
-initSelectionMap();
+// Initialize the selection map after layout is complete
+window.addEventListener("load", initSelectionMap);
 
 // Target species mode toggle (search / lifelist)
 let targetMode = "lifelist"; // "search" or "lifelist"
