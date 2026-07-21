@@ -12,15 +12,26 @@ logger = logging.getLogger(__name__)
 
 import duckdb
 from fastapi import FastAPI, HTTPException
+from fastapi import Request as Request_
+from fastapi.responses import Response as FastAPIResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from hotspot_optimizer import optimize_hotspots, load_probability_matrix, date_range_to_days_of_year
+import numpy as np
+from hotspot_optimizer import (
+    optimize_hotspots,
+    load_probability_matrix,
+    load_hotspot_durations,
+    date_range_to_days_of_year,
+    plan_big_day,
+    DEFAULT_HOTSPOT_MINUTES,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = str(BASE_DIR / "data" / "combined.duckdb")
 
 EBIRD_API_KEY = os.environ["EBIRD_API_KEY"]
+OSRM_BASE_URL = os.getenv("OSRM_BASE_URL", "https://router.project-osrm.org").rstrip("/")
 
 app = FastAPI(title="Fledgling")
 
@@ -34,6 +45,22 @@ class OptimizeRequest(BaseModel):
     start_date: date
     end_date: date
     k: int = 5
+    state_counties: list[StateCounty] | None = None
+    states: list[str] | None = None
+    country: str | None = None
+    center_lat: float | None = None
+    center_lon: float | None = None
+    max_driving_minutes: int | None = None
+    target_species: list[str] | None = None
+    exclude_locality_ids: list[int] | None = None
+
+
+class PlanBigDayRequest(BaseModel):
+    life_list: list[str] = []
+    start_date: date
+    end_date: date
+    window_start: str
+    window_end: str
     state_counties: list[StateCounty] | None = None
     states: list[str] | None = None
     country: str | None = None
@@ -185,7 +212,7 @@ def osrm_filter_hotspots(
             coords_str += f";{lon},{lat}"
 
         url = (
-            f"https://router.project-osrm.org/table/v1/driving/{coords_str}"
+            f"{OSRM_BASE_URL}/table/v1/driving/{coords_str}"
             f"?sources=0&annotations=duration"
         )
         req = Request(url, headers={"User-Agent": "Fledgling/1.0"})
@@ -207,6 +234,79 @@ def osrm_filter_hotspots(
                 result_ids.append(batch[j][0])
 
     return result_ids
+
+
+def osrm_duration_matrix(coords: list[tuple[float, float]]) -> np.ndarray:
+    """N×N driving-duration matrix (in minutes) from OSRM /table.
+
+    `coords` is a list of (lat, lon). Missing cells are filled with a large
+    sentinel so the optimizer won't select unreachable pairs.
+    """
+    n = len(coords)
+    if n == 0:
+        return np.zeros((0, 0), dtype=np.float64)
+    coord_str = ";".join(f"{lon},{lat}" for lat, lon in coords)
+    url = f"{OSRM_BASE_URL}/table/v1/driving/{coord_str}?annotations=duration"
+    req = Request(url, headers={"User-Agent": "Fledgling/1.0"})
+    with urlopen(req, timeout=60) as resp:
+        data = json.loads(resp.read())
+    if data.get("code") != "Ok":
+        raise RuntimeError(f"OSRM /table returned {data.get('code')}")
+    matrix = np.full((n, n), 9999.0, dtype=np.float64)
+    for i, row in enumerate(data["durations"]):
+        for j, sec in enumerate(row):
+            if sec is not None:
+                matrix[i, j] = float(sec) / 60.0
+    return matrix
+
+
+def osrm_route_geojson(coords: list[tuple[float, float]]) -> dict | None:
+    """Polyline for the ordered visit sequence. Returns GeoJSON geometry or None."""
+    if len(coords) < 2:
+        return None
+    coord_str = ";".join(f"{lon},{lat}" for lat, lon in coords)
+    url = f"{OSRM_BASE_URL}/route/v1/driving/{coord_str}?overview=full&geometries=geojson"
+    req = Request(url, headers={"User-Agent": "Fledgling/1.0"})
+    try:
+        with urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+    except Exception as e:
+        logger.warning(f"OSRM /route error: {e}")
+        return None
+    if data.get("code") != "Ok" or not data.get("routes"):
+        return None
+    return data["routes"][0]["geometry"]
+
+
+def _parse_hhmm(s: str) -> int:
+    """Convert 'HH:MM' → minutes since midnight."""
+    h, m = s.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _format_hhmm(mins: int) -> str:
+    mins %= 24 * 60
+    return f"{mins // 60:02d}:{mins % 60:02d}"
+
+
+@app.get("/osrm/{path:path}")
+def osrm_proxy(path: str, request: Request_):
+    """Dev-mode fallback proxy to OSRM.
+
+    In production nginx intercepts /osrm/ before it reaches FastAPI, so this
+    only runs under `python run.py` or `docker compose up` (no nginx front).
+    """
+    query = request.url.query
+    url = f"{OSRM_BASE_URL}/{path}" + (f"?{query}" if query else "")
+    req = Request(url, headers={"User-Agent": "Fledgling/1.0"})
+    try:
+        with urlopen(req, timeout=30) as resp:
+            body = resp.read()
+            content_type = resp.headers.get("Content-Type", "application/json")
+    except Exception as e:
+        logger.warning(f"OSRM proxy error for {url}: {e}")
+        raise HTTPException(status_code=502, detail="OSRM upstream error")
+    return FastAPIResponse(content=body, media_type=content_type)
 
 
 @app.post("/api/optimize")
@@ -285,6 +385,182 @@ def run_optimization(req: OptimizeRequest):
             for sp in result.species_combined_probs
         ],
     }
+
+
+@app.post("/api/plan-big-day")
+def run_plan_big_day(req: PlanBigDayRequest):
+    """Plan a single-day birding itinerary within a clock window.
+
+    Orienteering over the hotspot graph: pick and order stops so driving +
+    median per-stop time fit inside the user's window, maximizing expected
+    new species. See hotspot_optimizer.plan_big_day for the algorithm.
+    """
+    try:
+        start_min = _parse_hhmm(req.window_start)
+        end_min = _parse_hhmm(req.window_end)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="window_start/window_end must be 'HH:MM'")
+    if end_min <= start_min:
+        raise HTTPException(status_code=400, detail="window_end must be after window_start")
+    window_minutes = end_min - start_min
+
+    locality_ids = None
+    geo_description = None
+    if (
+        req.center_lat is not None
+        and req.center_lon is not None
+        and req.max_driving_minutes is not None
+    ):
+        locality_ids = osrm_filter_hotspots(
+            req.center_lat, req.center_lon, req.max_driving_minutes
+        )
+        geo_description = f"Within {req.max_driving_minutes} min drive"
+        if not locality_ids:
+            return {
+                "total_expected_species": 0.0,
+                "window_minutes": window_minutes,
+                "num_candidate_hotspots": 0,
+                "itinerary": [],
+                "leg_durations_minutes": [],
+                "total_travel_minutes": 0,
+                "route_geojson": None,
+                "geographic_filter": geo_description,
+            }
+
+    days_of_year = date_range_to_days_of_year(req.start_date, req.end_date)
+    con = duckdb.connect(DB_PATH, read_only=True)
+    try:
+        hotspot_info, prob_matrix, species_list = load_probability_matrix(
+            con, days_of_year, req.life_list,
+            state_counties=[(sc.state, sc.county) for sc in req.state_counties] if req.state_counties else None,
+            states=req.states,
+            country=req.country,
+            locality_ids=locality_ids,
+            target_species=req.target_species,
+            exclude_locality_ids=req.exclude_locality_ids,
+        )
+
+        MAX_BIGDAY_CANDIDATES = 500
+        if prob_matrix.shape[0] > MAX_BIGDAY_CANDIDATES:
+            scores = prob_matrix.sum(axis=1)
+            top_idx = np.argsort(-scores)[:MAX_BIGDAY_CANDIDATES]
+            top_idx_sorted = np.sort(top_idx)
+            prob_matrix = prob_matrix[top_idx_sorted]
+            hotspot_info = hotspot_info.iloc[top_idx_sorted].reset_index(drop=True)
+
+        if prob_matrix.size == 0:
+            return {
+                "total_expected_species": 0.0,
+                "window_minutes": window_minutes,
+                "num_candidate_hotspots": 0,
+                "itinerary": [],
+                "leg_durations_minutes": [],
+                "total_travel_minutes": 0,
+                "route_geojson": None,
+                "geographic_filter": geo_description or _describe_region(req),
+            }
+
+        locality_id_list = [int(lid) for lid in hotspot_info["locality_id"].tolist()]
+        median_map = load_hotspot_durations(con, locality_id_list)
+    finally:
+        con.close()
+
+    durations = np.full(len(locality_id_list), DEFAULT_HOTSPOT_MINUTES, dtype=np.float64)
+
+    coords = [
+        (float(hotspot_info.iloc[i]["latitude"]), float(hotspot_info.iloc[i]["longitude"]))
+        for i in range(len(hotspot_info))
+    ]
+    try:
+        travel_matrix = osrm_duration_matrix(coords)
+    except Exception:
+        logger.exception("OSRM duration matrix failed")
+        raise HTTPException(status_code=502, detail="Routing service unavailable")
+
+    tour, gains, final_miss, total_travel = plan_big_day(
+        prob_matrix, durations, travel_matrix, float(window_minutes)
+    )
+
+    geographic_filter = geo_description or _describe_region(req)
+
+    if not tour:
+        return {
+            "total_expected_species": 0.0,
+            "window_minutes": window_minutes,
+            "num_candidate_hotspots": int(hotspot_info.shape[0]),
+            "itinerary": [],
+            "leg_durations_minutes": [],
+            "total_travel_minutes": 0,
+            "route_geojson": None,
+            "geographic_filter": geographic_filter,
+        }
+
+    itinerary = []
+    leg_durations: list[int] = []
+    clock = start_min
+    cumulative = 0.0
+
+    for pos, idx in enumerate(tour):
+        if pos > 0:
+            leg_min = int(round(travel_matrix[tour[pos - 1], idx]))
+            leg_durations.append(leg_min)
+            clock += leg_min
+
+        row = hotspot_info.iloc[idx]
+        duration_min = int(durations[idx])
+        arrive = clock
+        depart = arrive + duration_min
+        clock = depart
+
+        species_probs = []
+        for s_idx, sp_name in enumerate(species_list):
+            p = float(prob_matrix[idx, s_idx])
+            if p >= 0.001:
+                species_probs.append({"common_name": sp_name, "probability": round(p, 4)})
+        species_probs.sort(key=lambda x: -x["probability"])
+
+        cumulative += gains[pos]
+        itinerary.append({
+            "order": pos + 1,
+            "locality_id": int(row["locality_id"]),
+            "locality": row["locality"],
+            "latitude": float(row["latitude"]),
+            "longitude": float(row["longitude"]),
+            "county": row["county"],
+            "state": row["state"],
+            "arrive": _format_hhmm(arrive),
+            "depart": _format_hhmm(depart),
+            "duration_minutes": duration_min,
+            "marginal_gain": round(gains[pos], 2),
+            "cumulative_expected": round(cumulative, 2),
+            "target_species": species_probs[:20],
+        })
+
+    ordered_coords = [(it["latitude"], it["longitude"]) for it in itinerary]
+    route_geojson = osrm_route_geojson(ordered_coords)
+
+    total_expected = float(np.sum(1.0 - final_miss))
+    return {
+        "total_expected_species": round(total_expected, 2),
+        "window_minutes": window_minutes,
+        "num_candidate_hotspots": int(hotspot_info.shape[0]),
+        "itinerary": itinerary,
+        "leg_durations_minutes": leg_durations,
+        "total_travel_minutes": int(round(total_travel)),
+        "route_geojson": route_geojson,
+        "geographic_filter": geographic_filter,
+    }
+
+
+def _describe_region(req: PlanBigDayRequest) -> str:
+    parts = []
+    if req.state_counties:
+        parts.append(", ".join(sc.county for sc in req.state_counties))
+    if req.states:
+        parts.append(", ".join(req.states))
+    if req.country:
+        parts.append(req.country)
+    return ", ".join(parts) if parts else "All areas"
 
 
 @app.get("/api/search-hotspots")

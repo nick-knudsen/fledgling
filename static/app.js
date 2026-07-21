@@ -407,8 +407,8 @@ let lifelistSource = "fresh"; // "upload" or "fresh"
 function updateOptimizeBtn() {
     const btn = document.getElementById("optimize-btn");
     if (searchMode === "driving") {
-        btn.disabled = true;
-        btn.textContent = "Driving Time search coming soon";
+        btn.disabled = !centerLat || !centerLon;
+        btn.textContent = "Find Hotspots";
     } else if (targetMode === "search") {
         btn.disabled = selectedSpeciesList.length === 0;
         btn.textContent = "Find Hotspots";
@@ -1449,10 +1449,23 @@ function parseCSVLine(line) {
 // Run optimization
 let lastRequestBody = null;
 let excludedLocalityIds = [];
+let bigDayResult = null;
+
+document.getElementById("bigday-toggle").addEventListener("change", () => {
+    const checked = document.getElementById("bigday-toggle").checked;
+    document.getElementById("bigday-inputs").style.display = checked ? "" : "none";
+    document.getElementById("k-group").style.display = checked ? "none" : "";
+    updateOptimizeBtn();
+});
 
 document.getElementById("optimize-btn").addEventListener("click", async () => {
     excludedLocalityIds = [];
-    await runOptimization();
+    if (document.getElementById("bigday-toggle").checked) {
+        await runBigDay();
+    } else {
+        bigDayResult = null;
+        await runOptimization();
+    }
 });
 
 async function runOptimization() {
@@ -1558,6 +1571,100 @@ async function runOptimization() {
     } finally {
         btn.disabled = false;
         btn.textContent = btnLabel;
+    }
+}
+
+async function runBigDay() {
+    const btn = document.getElementById("optimize-btn");
+    btn.disabled = true;
+    btn.textContent = "Planning...";
+
+    const windowStart = document.getElementById("window-start").value || "05:30";
+    const windowEnd = document.getElementById("window-end").value || "20:00";
+
+    const body = {
+        start_date: getDateValue("start"),
+        end_date: getDateValue("end"),
+        window_start: windowStart,
+        window_end: windowEnd,
+    };
+
+    if (targetMode === "search") {
+        body.target_species = selectedSpeciesList.map(sp => sp.comName).filter(s => !seenSpecies.has(s));
+    } else if (lifelistSource === "fresh") {
+        body.life_list = [...seenSpecies];
+    } else {
+        body.life_list = [...new Set([...lifeList, ...seenSpecies])];
+    }
+
+    if (searchMode === "driving") {
+        if (centerLat == null || centerLon == null) {
+            alert("Please select a location first.");
+            btn.disabled = false;
+            btn.textContent = "Find Hotspots";
+            return;
+        }
+        const maxMin = parseInt(document.getElementById("max-driving-minutes").value);
+        if (!maxMin || maxMin < 1) {
+            alert("Please enter a valid driving time.");
+            btn.disabled = false;
+            btn.textContent = "Find Hotspots";
+            return;
+        }
+        body.center_lat = centerLat;
+        body.center_lon = centerLon;
+        body.max_driving_minutes = maxMin;
+    } else {
+        const counties = Array.from(selectedCounties);
+        const states = Array.from(selectedStates);
+        const countries = Array.from(selectedCountries);
+        if (counties.length > 0) {
+            body.state_counties = counties.map(v => {
+                const [state, county] = v.split("|");
+                return { state, county };
+            });
+        } else if (states.length > 0) {
+            body.states = states;
+            if (countries.length > 0) body.country = countries[0];
+        } else if (countries.length === 1) {
+            body.country = countries[0];
+        }
+    }
+
+    try {
+        const resp = await fetch("/api/plan-big-day", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        if (!resp.ok) {
+            let msg = "Big Day planning failed";
+            try {
+                const err = await resp.json();
+                msg = err.detail || msg;
+            } catch {
+                msg = `Server error (${resp.status}). Please try again.`;
+            }
+            throw new Error(msg);
+        }
+        const data = await resp.json();
+        bigDayResult = data;
+        itinerary = [...(data.itinerary || [])];
+        resultsMode = "plan";
+        renderResults({
+            hotspots: data.itinerary || [],
+            num_candidate_hotspots: data.num_candidate_hotspots ?? (data.itinerary || []).length,
+            num_potential_lifers: Math.round(data.total_expected_species || 0),
+        });
+    } catch (err) {
+        const msg = err instanceof TypeError
+            ? "Connection lost. Please check your internet and try again."
+            : err.message;
+        document.getElementById("results").innerHTML =
+            `<div class="empty-state"><p>${msg}</p></div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Find Hotspots";
     }
 }
 
@@ -1751,6 +1858,31 @@ async function updateDrivingTime() {
     const el = document.getElementById("driving-time-value");
     if (!el) return;
 
+    if (bigDayResult) {
+        const totalMin = bigDayResult.total_travel_minutes || 0;
+        const hours = Math.floor(totalMin / 60);
+        const mins = totalMin % 60;
+        lastDrivingTime = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+        el.textContent = lastDrivingTime;
+        if (map && bigDayResult.route_geojson && !routeLine) {
+            clearRoute();
+            const geojson = JSON.parse(JSON.stringify(bigDayResult.route_geojson));
+            geojson.coordinates = geojson.coordinates.map(([lng, lat], i, arr) => {
+                let adj = adjustLng(lng);
+                if (i > 0) {
+                    const prevLng = arr[i - 1][0];
+                    while (adj - prevLng > 180) adj -= 360;
+                    while (prevLng - adj > 180) adj += 360;
+                }
+                arr[i][0] = adj;
+                return [adj, lat];
+            });
+            const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+            routeLine = L.geoJSON(geojson, { style: { color: accent, weight: 3, opacity: 0.7 } }).addTo(map);
+        }
+        return;
+    }
+
     const routeKey = itinerary.map(h => h.locality_id).join(",");
     if (routeKey === lastRouteKey) {
         el.textContent = lastDrivingTime;
@@ -1769,7 +1901,7 @@ async function updateDrivingTime() {
     el.textContent = "...";
     const coords = itinerary.map(h => `${h.longitude},${h.latitude}`).join(";");
     try {
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`);
+        const res = await fetch(`/osrm/route/v1/driving/${coords}?overview=full&geometries=geojson`);
         if (requestId !== routeRequestId) return;
         const data = await res.json();
         if (data.code === "Ok" && data.routes.length > 0) {
@@ -2185,6 +2317,7 @@ function renderPlanView() {
     const container = document.getElementById("results-view-container");
     const isSearch = targetMode === "search";
     const noun = (!isSearch && listType === "life") ? "lifers" : "targets";
+    const isBigDay = !!bigDayResult;
 
     const searchHtml = `
         <div class="hotspot-search">
@@ -2196,15 +2329,18 @@ function renderPlanView() {
     `;
 
     if (itinerary.length === 0) {
-        container.innerHTML = searchHtml + `<div class="empty-state"><p>Add hotspots from the Explore tab or search above to build your itinerary.</p></div>`;
-        wireHotspotSearch();
+        const emptyMsg = isBigDay
+            ? "No stops fit the time window. Try a wider area or longer window."
+            : "Add hotspots from the Explore tab or search above to build your itinerary.";
+        container.innerHTML = (isBigDay ? "" : searchHtml) + `<div class="empty-state"><p>${emptyMsg}</p></div>`;
+        if (!isBigDay) wireHotspotSearch();
         updateDrivingTime();
         return;
     }
 
     let html = `
         <div class="section-title-row">
-            <div class="section-title">Your Itinerary</div>
+            <div class="section-title">${isBigDay ? "Big Day Itinerary" : "Your Itinerary"}</div>
             <div class="expand-collapse-btns">
                 <button class="expand-collapse-btn" id="expand-all-btn">Expand All</button>
                 <button class="expand-collapse-btn" id="collapse-all-btn">Collapse All</button>
@@ -2212,7 +2348,7 @@ function renderPlanView() {
         </div>
     `;
 
-    html += searchHtml;
+    if (!isBigDay) html += searchHtml;
 
     // Calculate marginal gains based on itinerary order
     const cumulativeMiss = {}; // species -> product of (1 - p) for previous stops
@@ -2229,6 +2365,12 @@ function renderPlanView() {
 
     itinerary.forEach((h, i) => {
         const rank = i + 1;
+
+        if (isBigDay && i > 0) {
+            const legMin = bigDayResult.leg_durations_minutes[i - 1] ?? "?";
+            html += `<div class="bd-leg">\uD83D\uDE97 ${legMin} min drive</div>`;
+        }
+
         const speciesRows = h.target_species.slice(0, 25).map(sp => `
             <tr>
                 <td>${sp.common_name}</td>
@@ -2240,20 +2382,25 @@ function renderPlanView() {
             </tr>
         `).join("");
 
+        const dragHandle = isBigDay ? "" : `<span class="drag-handle" title="Drag to reorder">&#9776;</span>`;
+        const timeLabel = (isBigDay && h.arrive) ? `<span class="bd-time">${h.arrive}&thinsp;&ndash;&thinsp;${h.depart}</span>` : "";
+        const removeBtn = isBigDay ? "" : `<button class="remove-itinerary-btn" data-index="${i}" title="Remove from itinerary"></button>`;
+
         html += `
             <div class="hotspot-card plan-card" data-locality-id="${h.locality_id}" data-index="${i}">
                 <div class="hotspot-header">
-                    <span class="drag-handle" title="Drag to reorder">&#9776;</span>
+                    ${dragHandle}
                     <span class="rank">${rank}</span>
                     <span class="name">${h.locality}</span>
                     <span class="gain-group">
+                        ${timeLabel}
                         <span class="gain">+${marginalGains[i].toFixed(2)} marginal ${noun}</span>
                     </span>
-                    <button class="remove-itinerary-btn" data-index="${i}" title="Remove from itinerary"></button>
+                    ${removeBtn}
                 </div>
                 <div class="hotspot-body">
                     <div class="hotspot-meta">
-                        ${h.county || regionName(h.state) || ""} &middot;
+                        ${isBigDay ? `${h.duration_minutes} min &middot; ` : (h.county || regionName(h.state) || "") + " &middot; "}
                         ${h.latitude.toFixed(4)}, ${h.longitude.toFixed(4)} &middot;
                         <a href="https://ebird.org/hotspot/L${h.locality_id}" target="_blank" rel="noopener">View on eBird</a> &middot;
                         <a href="https://www.google.com/maps/search/${encodeURIComponent(h.locality)}/@${h.latitude},${h.longitude},15z" target="_blank" rel="noopener">View on Google Maps</a>
@@ -2315,7 +2462,7 @@ function renderPlanView() {
     }
 
     container.innerHTML = html;
-    wireHotspotSearch();
+    if (!isBigDay) wireHotspotSearch();
 
     // Wire up card interactions
     container.querySelectorAll(".plan-card").forEach(card => {
@@ -2349,6 +2496,11 @@ function renderPlanView() {
             updateMap();
         });
     });
+
+    if (isBigDay) {
+        updateDrivingTime();
+        return;
+    }
 
     // Pointer-based drag and drop reordering
     let dragState = null;

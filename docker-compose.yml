@@ -8,3 +8,15 @@ services:
       - ./data:/app/data:ro
     environment:
       - EBIRD_API_KEY=${EBIRD_API_KEY}
+      - OSRM_BASE_URL=http://osrm:5000
+    depends_on:
+      - osrm
+
+  osrm:
+    image: osrm/osrm-backend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - ./data/osrm:/data:ro
+    command: osrm-routed --algorithm mld --max-table-size 500 /data/vermont-latest.osrm

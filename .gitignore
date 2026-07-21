@@ -209,4 +209,4 @@ __marimo__/
 data/
 secrets.toml
 run.py
-CLAUDE.md
+CLAUDE.md.venv-wsl

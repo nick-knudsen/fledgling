@@ -1,0 +1,38 @@
+k,counties,expected_species,num_candidates,tour_stops,travel_minutes,beats_baseline,delta
+14,ALL,125.6548,500,25,891.1,False,0.0
+1,Grand Isle,80.5571,24,24,865.3,False,-45.0977
+1,Windsor,102.0136,86,28,897.9,False,-23.6412
+1,Chittenden,118.9775,135,25,893.9,False,-6.6773
+1,Orleans,77.0517,38,24,889.8,False,-48.6031
+1,Caledonia,65.1881,30,24,885.4,False,-60.4667
+2,"Caledonia, Lamoille",80.5734,77,26,884.2,False,-45.0814
+2,"Caledonia, Orleans",84.9158,68,26,899.2,False,-40.739
+2,"Bennington, Grand Isle",99.4311,63,22,898.3,False,-26.2237
+2,"Addison, Windham",121.8299,164,33,898.0,False,-3.8249
+2,"Caledonia, Rutland",104.5389,129,22,899.7,False,-21.1159
+3,"Caledonia, Washington, Windham",108.6513,169,33,899.9,False,-17.0035
+3,"Essex, Orleans, Washington",102.2046,150,30,899.2,False,-23.4502
+3,"Orange, Rutland, Windsor",109.4845,217,27,899.2,False,-16.1703
+3,"Orleans, Washington, Windsor",106.5431,204,30,899.9,False,-19.1117
+3,"Essex, Rutland, Windham",112.6836,190,27,898.0,False,-12.9712
+4,"Addison, Caledonia, Franklin, Windham",121.8299,239,33,898.0,False,-3.8249
+4,"Grand Isle, Orleans, Washington, Windsor",110.5824,228,29,898.3,False,-15.0724
+4,"Caledonia, Lamoille, Orange, Washington",101.3637,189,29,899.2,False,-24.2911
+4,"Bennington, Orleans, Windham, Windsor",111.603,222,30,899.0,False,-14.0518
+4,"Addison, Franklin, Grand Isle, Orleans",121.6598,212,32,893.2,False,-3.995
+5,"Bennington, Caledonia, Orange, Orleans, Windsor",105.9031,225,27,898.5,False,-19.7517
+5,"Caledonia, Grand Isle, Lamoille, Rutland, Washington",106.0355,280,30,899.7,False,-19.6193
+5,"Caledonia, Chittenden, Franklin, Lamoille, Rutland",124.6094,356,27,898.7,False,-1.0454
+5,"Bennington, Orleans, Rutland, Washington, Windham",112.6836,315,27,898.0,False,-12.9712
+5,"Addison, Chittenden, Franklin, Rutland, Washington",124.6094,464,27,898.7,False,-1.0454
+7,"Chittenden, Franklin, Grand Isle, Lamoille, Rutland, Windham, Windsor",125.8996,495,27,898.4,True,0.2448
+7,"Chittenden, Franklin, Grand Isle, Lamoille, Orange, Orleans, Rutland",125.8996,420,27,898.4,True,0.2448
+7,"Addison, Essex, Franklin, Grand Isle, Orleans, Rutland, Washington",122.4053,423,31,898.7,False,-3.2495
+7,"Essex, Grand Isle, Lamoille, Orange, Orleans, Rutland, Washington",110.9352,352,25,895.2,False,-14.7196
+7,"Addison, Essex, Grand Isle, Lamoille, Orleans, Washington, Windham",123.6156,385,34,899.5,False,-2.0392
+10,"Bennington, Chittenden, Essex, Franklin, Grand Isle, Lamoille, Orange, Orleans, Rutland, Windsor",125.8996,500,27,898.4,True,0.2448
+10,"Addison, Chittenden, Franklin, Grand Isle, Lamoille, Orange, Orleans, Rutland, Windham, Windsor",125.8237,500,25,890.9,True,0.1689
+10,"Addison, Bennington, Caledonia, Essex, Franklin, Grand Isle, Lamoille, Orange, Washington, Windham",121.515,493,32,899.5,False,-4.1398
+10,"Addison, Bennington, Caledonia, Chittenden, Franklin, Grand Isle, Orange, Washington, Windham, Windsor",125.7139,500,27,899.4,True,0.0591
+10,"Addison, Bennington, Essex, Franklin, Lamoille, Orange, Orleans, Rutland, Washington, Windsor",122.1808,500,33,896.1,False,-3.474
+14,"Addison, Bennington, Caledonia, Chittenden, Essex, Franklin, Grand Isle, Lamoille, Orange, Orleans, Rutland, Washington, Windham, Windsor",125.6548,500,25,891.1,False,0.0

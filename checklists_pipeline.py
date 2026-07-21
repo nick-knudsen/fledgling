@@ -18,7 +18,7 @@ WITH sampling_staging AS (
         "DURATION MINUTES" AS duration_minutes,
         "EFFORT DISTANCE KM" AS effort_distance_km,
         ROW_NUMBER() OVER (PARTITION BY "GROUP IDENTIFIER" ORDER BY "SAMPLING EVENT IDENTIFIER") AS rn
-    FROM read_csv_auto("ebd_sampling_rel{FILENAME}.txt")
+    FROM read_csv_auto("data/ebd_sampling_rel{FILENAME}.txt")
     WHERE "LOCALITY TYPE" = 'H' AND "PROTOCOL NAME" IN ('Stationary', 'Traveling')
 )
 SELECT
