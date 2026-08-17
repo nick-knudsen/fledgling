@@ -1,9 +1,9 @@
+from dataclasses import dataclass
+from datetime import date, timedelta
+
 import duckdb
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
-from datetime import date, timedelta
-from typing import Optional
 
 
 @dataclass
@@ -57,12 +57,12 @@ def load_probability_matrix(
     con: duckdb.DuckDBPyConnection,
     days_of_year: list[int],
     life_list_names: list[str],
-    state_counties: Optional[list[tuple[str, str]]] = None,
-    states: Optional[list[str]] = None,
-    country: Optional[str] = None,
-    locality_ids: Optional[list[int]] = None,
-    target_species: Optional[list[str]] = None,
-    exclude_locality_ids: Optional[list[int]] = None,
+    state_counties: list[tuple[str, str]] | None = None,
+    states: list[str] | None = None,
+    country: str | None = None,
+    locality_ids: list[int] | None = None,
+    target_species: list[str] | None = None,
+    exclude_locality_ids: list[int] | None = None,
 ) -> tuple[pd.DataFrame, np.ndarray, list[str]]:
     """Load and prepare the probability matrix from the database.
 
@@ -168,7 +168,8 @@ def load_probability_matrix(
         con.unregister("life_list_view")
 
     if df.empty:
-        empty_info = pd.DataFrame(columns=["locality", "locality_id", "latitude", "longitude", "county", "state"])
+        empty_columns = ["locality", "locality_id", "latitude", "longitude", "county", "state"]
+        empty_info = pd.DataFrame(columns=empty_columns)
         return empty_info, np.empty((0, 0)), []
 
     pivot = df.pivot_table(
@@ -237,12 +238,12 @@ def optimize_hotspots(
     start_date: date,
     end_date: date,
     k: int = 5,
-    state_counties: Optional[list[tuple[str, str]]] = None,
-    states: Optional[list[str]] = None,
-    country: Optional[str] = None,
-    locality_ids: Optional[list[int]] = None,
-    target_species: Optional[list[str]] = None,
-    exclude_locality_ids: Optional[list[int]] = None,
+    state_counties: list[tuple[str, str]] | None = None,
+    states: list[str] | None = None,
+    country: str | None = None,
+    locality_ids: list[int] | None = None,
+    target_species: list[str] | None = None,
+    exclude_locality_ids: list[int] | None = None,
 ) -> OptimizationResult:
     """Main entry point for the hotspot optimizer."""
     days_of_year = date_range_to_days_of_year(start_date, end_date)
@@ -283,7 +284,7 @@ def optimize_hotspots(
     # Assemble results
     hotspots = []
     cumulative = 0.0
-    for rank_idx, (mat_idx, gain) in enumerate(zip(selected_indices, marginal_gains)):
+    for rank_idx, (mat_idx, gain) in enumerate(zip(selected_indices, marginal_gains, strict=True)):
         cumulative += gain
         row = hotspot_info.iloc[mat_idx]
 

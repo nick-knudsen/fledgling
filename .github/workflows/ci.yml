@@ -25,15 +25,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --all-groups
 
-      # TODO(T1 lint/type cleanup): the codebase predates ruff/mypy adoption and
-      # doesn't pass either cleanly yet. Both steps run and report on every PR,
-      # but `continue-on-error` keeps them from blocking merges until that
-      # cleanup lands — remove it once `ruff check .` and `uv run mypy .` are
-      # both clean, so this job actually gates on lint/type errors going forward.
       - name: ruff check
-        continue-on-error: true
         run: uv run ruff check .
 
       - name: mypy
-        continue-on-error: true
         run: uv run mypy .

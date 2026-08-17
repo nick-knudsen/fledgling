@@ -1,5 +1,6 @@
 import os
 import sys
+
 import duckdb as dk
 
 
@@ -295,7 +296,9 @@ def _insert_into_combined(con, combined_db_path):
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python frequency_data_pipeline.py <region_code> <update_month-year> [input_dir]")
+        print(
+            "Usage: python frequency_data_pipeline.py <region_code> <update_month-year> [input_dir]"
+        )
         print("Example: python frequency_data_pipeline.py US-AZ Dec-2025")
         print("Example: python frequency_data_pipeline.py US-AZ Dec-2025 'S:/eBird downloads'")
         sys.exit(1)
