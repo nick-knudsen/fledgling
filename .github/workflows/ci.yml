@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --all-groups
+
+      # TODO(T1 lint/type cleanup): the codebase predates ruff/mypy adoption and
+      # doesn't pass either cleanly yet. Both steps run and report on every PR,
+      # but `continue-on-error` keeps them from blocking merges until that
+      # cleanup lands — remove it once `ruff check .` and `uv run mypy .` are
+      # both clean, so this job actually gates on lint/type errors going forward.
+      - name: ruff check
+        continue-on-error: true
+        run: uv run ruff check .
+
+      - name: mypy
+        continue-on-error: true
+        run: uv run mypy .

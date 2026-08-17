@@ -1,12 +1,20 @@
 FROM python:3.12-slim
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+
+# Installed in its own layer, ahead of the app code, so this only reruns when
+# pyproject.toml/uv.lock actually change.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev
 
 COPY api.py hotspot_optimizer.py ./
 COPY static/ static/
+
+ENV PATH="/app/.venv/bin:${PATH}"
 
 # Data directory should be mounted as a volume at runtime:
 #   docker run -v /path/to/data:/app/data ...
