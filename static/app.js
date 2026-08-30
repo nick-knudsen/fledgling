@@ -389,7 +389,9 @@ const tileSets = {
         attribution: '&copy; OpenStreetMap contributors',
     },
     dark: {
-        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        // Carto tile key is meant to be client-visible; access is restricted by
+        // domain in the Carto dashboard, not by keeping this value secret.
+        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_2kob_1_fd7cfd03b02806759e38e7f3",
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
     },
 };

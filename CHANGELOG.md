@@ -3,8 +3,14 @@
 Notable changes to Fledgling. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 entries are grouped as `Added`, `Changed`, `Fixed`, or `Removed`.
 
-Fledgling deploys continuously rather than cutting versioned releases, so entries below are grouped by date
-instead of a version number.
+Fledgling deploys continuously rather than cutting versioned releases, so entries below are grouped by date instead of a version number.
+
+
+## 2026-08-30
+
+### Added
+- CI: typechecking and linting
+- Carto API key
 
 ## 2026-08-16
 
