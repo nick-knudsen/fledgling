@@ -1,0 +1,26 @@
+name: Deploy
+
+# Fires after the CI workflow finishes on main (i.e. only once whatever just
+# merged has actually passed ruff/mypy/pytest on main itself), not directly
+# on push - avoids deploying anything CI hasn't confirmed.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      # The deploy user's authorized_keys entry pins this key to a forced
+      # command server-side, so `script` here is documentation of intent -
+      # the VPS runs its own deploy.sh regardless of what's sent.
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: cd /opt/fledgling && git pull && docker compose up -d --build
