@@ -13,8 +13,19 @@ permissions:
   contents: read
 
 jobs:
-  lint-and-typecheck:
+  check:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ruff
+            run: uv run ruff check .
+          - name: mypy
+            run: uv run mypy .
+          - name: pytest
+            run: uv run pytest
     steps:
       - uses: actions/checkout@v4
 
@@ -25,11 +36,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --all-groups
 
-      - name: ruff check
-        run: uv run ruff check .
-
-      - name: mypy
-        run: uv run mypy .
-
-      - name: pytest
-        run: uv run pytest
+      - name: ${{ matrix.name }}
+        run: ${{ matrix.run }}
