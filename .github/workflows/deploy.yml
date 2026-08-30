@@ -15,8 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # The deploy user's authorized_keys entry pins this key to a forced
-      # command server-side, so `script` here is documentation of intent -
-      # the VPS runs its own deploy.sh regardless of what's sent.
+      # command server-side (see README/ops notes), so `script` here is
+      # documentation of intent - the VPS runs its own fixed command
+      # regardless of what's sent.
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.5
         with:
