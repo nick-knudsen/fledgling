@@ -10,6 +10,7 @@ Fledgling deploys continuously rather than cutting versioned releases, so entrie
 
 ### Added
 - CI: typechecking and linting
+- CD: deploy on merge to main
 - Carto API key
 
 ## 2026-08-16
