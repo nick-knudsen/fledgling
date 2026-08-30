@@ -28,6 +28,7 @@ docker compose up -d --build
 cp nginx.conf /etc/nginx/sites-available/fledgling
 ln -sf /etc/nginx/sites-available/fledgling /etc/nginx/sites-enabled/fledgling
 rm -f /etc/nginx/sites-enabled/default
+cp cloudflare-realip.conf /etc/nginx/conf.d/cloudflare-realip.conf
 nginx -t
 systemctl reload nginx
 
