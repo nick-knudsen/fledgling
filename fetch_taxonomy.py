@@ -55,6 +55,7 @@ con.executemany(
     rows,
 )
 
-count = con.execute("SELECT COUNT(*) FROM species").fetchone()[0]
-print(f"Stored {count} species in {DB_PATH}")
+count_row = con.execute("SELECT COUNT(*) FROM species").fetchone()
+assert count_row is not None  # COUNT(*) always returns exactly one row
+print(f"Stored {count_row[0]} species in {DB_PATH}")
 con.close()

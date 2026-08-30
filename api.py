@@ -1,21 +1,22 @@
 import csv
+import json
+import logging
 import math
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
+from typing import cast
 from urllib.request import Request, urlopen
-import json
-import logging
-
-logger = logging.getLogger(__name__)
 
 import duckdb
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from hotspot_optimizer import optimize_hotspots, load_probability_matrix, date_range_to_days_of_year
+from hotspot_optimizer import date_range_to_days_of_year, load_probability_matrix, optimize_hotspots
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = str(BASE_DIR / "data" / "combined.duckdb")
@@ -64,7 +65,9 @@ def add_recent_observations(hotspots: list[dict]) -> list[dict]:
     locality_ids = [h["locality_id"] for h in hotspots]
 
     with ThreadPoolExecutor(max_workers=5) as pool:
-        recent_by_hotspot = dict(zip(locality_ids, pool.map(fetch_recent_species, locality_ids)))
+        recent_by_hotspot = dict(
+            zip(locality_ids, pool.map(fetch_recent_species, locality_ids), strict=True)
+        )
 
     for h in hotspots:
         recent = recent_by_hotspot.get(h["locality_id"], set())
@@ -96,7 +99,7 @@ def get_search_areas():
         rows = con.execute(
             "SELECT DISTINCT country, state, county FROM hotspots ORDER BY country, state, county"
         ).fetchall()
-        result = {}
+        result: dict[str, dict[str | None, list[str | None]]] = {}
         for country, state, county in rows:
             result.setdefault(country, {}).setdefault(state, []).append(county)
         return result
@@ -140,7 +143,10 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371.0
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    )
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
@@ -217,7 +223,11 @@ def run_optimization(req: OptimizeRequest):
     the search parameters. No user data is stored on the server.
     """
     locality_ids = None
-    if req.center_lat is not None and req.center_lon is not None and req.max_driving_minutes is not None:
+    if (
+        req.center_lat is not None
+        and req.center_lon is not None
+        and req.max_driving_minutes is not None
+    ):
         locality_ids = osrm_filter_hotspots(req.center_lat, req.center_lon, req.max_driving_minutes)
         if not locality_ids:
             return {
@@ -237,16 +247,20 @@ def run_optimization(req: OptimizeRequest):
             start_date=req.start_date,
             end_date=req.end_date,
             k=req.k,
-            state_counties=[(sc.state, sc.county) for sc in req.state_counties] if req.state_counties else None,
+            state_counties=(
+                [(sc.state, sc.county) for sc in req.state_counties] if req.state_counties else None
+            ),
             states=req.states,
             country=req.country,
             locality_ids=locality_ids,
             target_species=req.target_species,
             exclude_locality_ids=req.exclude_locality_ids,
         )
-    except Exception:
+    except Exception as e:
         logger.exception("Optimization failed")
-        raise HTTPException(status_code=500, detail="Search failed. Try a smaller area or date range.")
+        raise HTTPException(
+            status_code=500, detail="Search failed. Try a smaller area or date range."
+        ) from e
 
     hotspots = [
         {
@@ -373,21 +387,21 @@ def get_hotspot_details(req: HotspotDetailRequest):
         # No species data — return basic hotspot info
         con = duckdb.connect(DB_PATH, read_only=True)
         try:
-            row = con.execute(
+            basic_row = con.execute(
                 f"SELECT locality_id, locality, latitude, longitude, county, state "
                 f"FROM hotspots WHERE locality_id = {req.locality_id}"
             ).fetchone()
         finally:
             con.close()
-        if not row:
+        if not basic_row:
             raise HTTPException(status_code=404, detail="Hotspot not found")
         return {
-            "locality_id": row[0],
-            "locality": row[1],
-            "latitude": row[2],
-            "longitude": row[3],
-            "county": row[4],
-            "state": row[5],
+            "locality_id": basic_row[0],
+            "locality": basic_row[1],
+            "latitude": basic_row[2],
+            "longitude": basic_row[3],
+            "county": basic_row[4],
+            "state": basic_row[5],
             "target_species": [],
         }
 
@@ -396,7 +410,7 @@ def get_hotspot_details(req: HotspotDetailRequest):
         p = float(prob_matrix[0, s_idx])
         if p >= 0.001:
             target_species.append({"common_name": sp_name, "probability": round(p, 4)})
-    target_species.sort(key=lambda x: x["probability"], reverse=True)
+    target_species.sort(key=lambda x: cast(float, x["probability"]), reverse=True)
 
     row = hotspot_info.iloc[0]
     result = {

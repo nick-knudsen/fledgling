@@ -19,6 +19,7 @@ import shutil
 import sys
 import tarfile
 import time
+from contextlib import ExitStack
 from datetime import datetime
 from getpass import getpass
 from pathlib import Path
@@ -73,13 +74,12 @@ def get_session_cookies(username, password):
 
         # Check if login succeeded by looking for the session cookie
         cookies = {c["name"]: c["value"] for c in context.cookies()}
-        if "EBIRD_SESSIONID" not in cookies:
-            # Login may have failed — check if we're still on the login page
-            if "cassso" in page.url or "forceLogin" in page.url:
-                raise RuntimeError(
-                    "Login failed. Check your credentials. "
-                    f"Current URL: {page.url}"
-                )
+        # Login may have failed — check if we're still on the login page
+        if "EBIRD_SESSIONID" not in cookies and ("cassso" in page.url or "forceLogin" in page.url):
+            raise RuntimeError(
+                "Login failed. Check your credentials. "
+                f"Current URL: {page.url}"
+            )
         log.info(f"Login successful. Current URL: {page.url}")
         browser.close()
 
@@ -98,21 +98,23 @@ def download_world_dataset(cookies, dest_path):
     start = time.time()
     size = 0
 
-    with httpx.Client(follow_redirects=True, timeout=httpx.Timeout(600.0)) as client:
-        with client.stream("GET", WORLD_DOWNLOAD_URL, headers=headers) as resp:
-            if resp.status_code == 302 or resp.status_code == 401:
-                raise RuntimeError(
-                    f"Authentication failed (HTTP {resp.status_code}). "
-                    "Session cookies may be invalid."
-                )
-            resp.raise_for_status()
-            with open(dest_path, "wb") as f:
-                for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
-                    f.write(chunk)
-                    size += len(chunk)
-                    # Log progress every 1 GB
-                    if size % (1024 ** 3) < 1024 * 1024:
-                        log.info(f"  {size / (1024 ** 3):.1f} GB downloaded...")
+    with (
+        httpx.Client(follow_redirects=True, timeout=httpx.Timeout(600.0)) as client,
+        client.stream("GET", WORLD_DOWNLOAD_URL, headers=headers) as resp,
+    ):
+        if resp.status_code == 302 or resp.status_code == 401:
+            raise RuntimeError(
+                f"Authentication failed (HTTP {resp.status_code}). "
+                "Session cookies may be invalid."
+            )
+        resp.raise_for_status()
+        with open(dest_path, "wb") as f:
+            for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
+                f.write(chunk)
+                size += len(chunk)
+                # Log progress every 1 GB
+                if size % (1024 ** 3) < 1024 * 1024:
+                    log.info(f"  {size / (1024 ** 3):.1f} GB downloaded...")
 
     elapsed = time.time() - start
     log.info(f"Download complete: {size / (1024 ** 3):.1f} GB in {elapsed / 60:.0f} minutes")
@@ -194,50 +196,46 @@ def split_world_file(world_file, split_dir=None):
     bytes_read = 0
     last_progress = 0
 
-    try:
-        with open(world_file, "r", encoding="utf-8") as f:
-            header = f.readline()
-            bytes_read += len(header.encode("utf-8"))
-            columns = header.strip().split("\t")
-            try:
-                country_idx = columns.index("COUNTRY CODE")
-            except ValueError:
-                raise RuntimeError(
-                    f"COUNTRY CODE column not found. Columns: {columns[:10]}..."
+    with ExitStack() as stack, open(world_file, encoding="utf-8") as f:
+        header = f.readline()
+        bytes_read += len(header.encode("utf-8"))
+        columns = header.strip().split("\t")
+        try:
+            country_idx = columns.index("COUNTRY CODE")
+        except ValueError as e:
+            raise RuntimeError(
+                f"COUNTRY CODE column not found. Columns: {columns[:10]}..."
+            ) from e
+
+        header_bytes = header.encode("utf-8")
+
+        for line in f:
+            line_bytes = line.encode("utf-8")
+            bytes_read += len(line_bytes)
+            line_count += 1
+            fields = line.split("\t")
+            if len(fields) <= country_idx:
+                continue
+            country = fields[country_idx]
+
+            if country not in file_handles:
+                out_path = split_dir / f"{country}.txt.gz"
+                file_handles[country] = stack.enter_context(gzip.open(out_path, "wb"))
+                file_handles[country].write(header_bytes)
+                country_bytes[country] = len(header_bytes)
+                log.info(f"  New country: {country}")
+
+            file_handles[country].write(line_bytes)
+            country_bytes[country] += len(line_bytes)
+
+            # Log progress every 5%
+            pct = int(bytes_read / file_size * 100)
+            if pct >= last_progress + 5:
+                last_progress = pct
+                log.info(
+                    f"  {pct}% ({line_count:,} lines, "
+                    f"{len(file_handles)} countries)"
                 )
-
-            header_bytes = header.encode("utf-8")
-
-            for line in f:
-                line_bytes = line.encode("utf-8")
-                bytes_read += len(line_bytes)
-                line_count += 1
-                fields = line.split("\t")
-                if len(fields) <= country_idx:
-                    continue
-                country = fields[country_idx]
-
-                if country not in file_handles:
-                    out_path = split_dir / f"{country}.txt.gz"
-                    file_handles[country] = gzip.open(out_path, "wb")
-                    file_handles[country].write(header_bytes)
-                    country_bytes[country] = len(header_bytes)
-                    log.info(f"  New country: {country}")
-
-                file_handles[country].write(line_bytes)
-                country_bytes[country] += len(line_bytes)
-
-                # Log progress every 5%
-                pct = int(bytes_read / file_size * 100)
-                if pct >= last_progress + 5:
-                    last_progress = pct
-                    log.info(
-                        f"  {pct}% ({line_count:,} lines, "
-                        f"{len(file_handles)} countries)"
-                    )
-    finally:
-        for fh in file_handles.values():
-            fh.close()
 
     log.info(f"Split complete: {line_count:,} lines into {len(file_handles)} countries")
 
@@ -357,40 +355,39 @@ def _split_by_column(data_path, column_name, split_dir):
     split_dir.mkdir(parents=True, exist_ok=True)
 
     data_path = Path(data_path)
-    opener = gzip.open if data_path.suffix == ".gz" else open
-    open_kwargs = {"mode": "rt", "encoding": "utf-8"} if data_path.suffix == ".gz" else {"mode": "r", "encoding": "utf-8"}
+
+    def _open_data_file():
+        if data_path.suffix == ".gz":
+            return gzip.open(data_path, mode="rt", encoding="utf-8")
+        return open(data_path, encoding="utf-8")
 
     file_handles = {}
     region_bytes = {}
-    try:
-        with opener(data_path, **open_kwargs) as f:
-            header = f.readline()
-            header_bytes = len(header.encode("utf-8"))
-            columns = header.strip().split("\t")
-            try:
-                col_idx = columns.index(column_name)
-            except ValueError:
-                raise RuntimeError(
-                    f"{column_name} column not found. Columns: {columns[:10]}..."
-                )
+    with ExitStack() as stack, _open_data_file() as f:
+        header = f.readline()
+        header_bytes = len(header.encode("utf-8"))
+        columns = header.strip().split("\t")
+        try:
+            col_idx = columns.index(column_name)
+        except ValueError as e:
+            raise RuntimeError(
+                f"{column_name} column not found. Columns: {columns[:10]}..."
+            ) from e
 
-            for line in f:
-                fields = line.split("\t")
-                if len(fields) <= col_idx:
-                    continue
-                value = fields[col_idx]
+        for line in f:
+            fields = line.split("\t")
+            if len(fields) <= col_idx:
+                continue
+            value = fields[col_idx]
 
-                if value not in file_handles:
-                    out_path = split_dir / f"{value}.txt"
-                    file_handles[value] = open(out_path, "w", encoding="utf-8")
-                    file_handles[value].write(header)
-                    region_bytes[value] = header_bytes
+            if value not in file_handles:
+                out_path = split_dir / f"{value}.txt"
+                file_handles[value] = stack.enter_context(open(out_path, "w", encoding="utf-8"))
+                file_handles[value].write(header)
+                region_bytes[value] = header_bytes
 
-                file_handles[value].write(line)
-                region_bytes[value] += len(line.encode("utf-8"))
-    finally:
-        for fh in file_handles.values():
-            fh.close()
+            file_handles[value].write(line)
+            region_bytes[value] += len(line.encode("utf-8"))
 
     regions = []
     for txt_file in sorted(split_dir.glob("*.txt")):
@@ -485,6 +482,13 @@ def process_large_country(code, data_path, memory_limit):
 # Final sort + swap
 # ---------------------------------------------------------------------------
 
+def count_rows(con, table: str) -> int:
+    """Row count for `table`. COUNT(*) always returns exactly one row."""
+    row = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+    assert row is not None
+    return row[0]
+
+
 def final_sort(memory_limit):
     """Sort rolling_wilson_score by (day_of_year, locality_id) for query performance."""
     log.info("Sorting rolling_wilson_score (this may take a while)...")
@@ -501,9 +505,9 @@ def final_sort(memory_limit):
         ALTER TABLE rolling_wilson_score_sorted RENAME TO rolling_wilson_score;
     """)
 
-    hotspots = con.execute("SELECT COUNT(*) FROM hotspots").fetchone()[0]
-    wilson = con.execute("SELECT COUNT(*) FROM rolling_wilson_score").fetchone()[0]
-    regions = con.execute("SELECT COUNT(*) FROM processed_regions").fetchone()[0]
+    hotspots = count_rows(con, "hotspots")
+    wilson = count_rows(con, "rolling_wilson_score")
+    regions = count_rows(con, "processed_regions")
     log.info(f"Final database: {hotspots:,} hotspots, {wilson:,} wilson rows, {regions} regions")
     con.close()
 
@@ -528,7 +532,7 @@ def copy_species_table():
     con.execute("DROP TABLE IF EXISTS species")
     con.execute("CREATE TABLE species AS SELECT * FROM live.species")
     con.execute("DETACH live")
-    cnt = con.execute("SELECT COUNT(*) FROM species").fetchone()[0]
+    cnt = count_rows(con, "species")
     con.close()
     log.info(f"  Copied {cnt:,} species")
 
@@ -645,7 +649,7 @@ def main():
     log.info(f"Remaining: {len(to_process)}")
 
     if args.dry_run:
-        for code, path, size in to_process:
+        for code, _path, size in to_process:
             label = "SPLIT" if size > LARGE_COUNTRY_THRESHOLD else "process"
             log.info(f"  [{label}] {code} ({size / (1024**3):.1f} GB)")
         log.info(f"\n{len(to_process)} regions would be processed.")
