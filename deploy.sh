@@ -28,6 +28,7 @@ docker compose up -d --build
 cp nginx.conf /etc/nginx/sites-available/fledgling
 ln -sf /etc/nginx/sites-available/fledgling /etc/nginx/sites-enabled/fledgling
 rm -f /etc/nginx/sites-enabled/default
+cp cloudflare-realip.conf /etc/nginx/conf.d/cloudflare-realip.conf
 nginx -t
 systemctl reload nginx
 
@@ -42,3 +43,7 @@ echo "Reminders:"
 echo "  - Copy your data/ directory to /opt/fledgling/data/"
 echo "  - Edit /opt/fledgling/.env with your real EBIRD_API_KEY"
 echo "  - Run 'docker compose up -d' after making changes"
+echo "  - If Cloudflare is in front of this domain and its zone is already"
+echo "    active, run restrict-firewall-to-cloudflare.sh once DNS/TLS are"
+echo "    confirmed working. Do NOT run it before that (breaks certbot"
+echo "    above and cuts off direct access) - see that script's header."
