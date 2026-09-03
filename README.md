@@ -41,6 +41,22 @@ uv run python frequency_data_pipeline.py <region_code> <update_month-year>  # in
 `ebird_pipeline.py --help` lists resume/dry-run flags for re-running partial pipeline
 progress without starting over.
 
+### OSRM (driving-distance filtering)
+
+The driving-time filter on `/api/optimize` calls a self-hosted OSRM instance rather than
+the public OSRM demo API, scoped to North America. Locally, point it at the small Vermont
+extract already in `data/osrm/` (built via `osrm-extract`/`osrm-partition`/`osrm-customize`,
+same layout as production's full North America graph):
+
+```bash
+docker run --rm -p 5000:5000 -v "$(pwd)/data/osrm:/data" \
+  ghcr.io/project-osrm/osrm-backend osrm-routed --algorithm mld /data/vermont-latest.osrm
+```
+
+The app reads the OSRM base URL from `OSRM_BASE_URL`, defaulting to `http://localhost:5000`
+so this just works locally with no `.env` entry needed. Without it running, everything else
+in the app still works — the driving filter degrades gracefully rather than blocking startup.
+
 ### Secrets
 
 - `fetch_taxonomy.py` reads an eBird API key from a gitignored `secrets.toml`:

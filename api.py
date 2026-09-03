@@ -22,6 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = str(BASE_DIR / "data" / "combined.duckdb")
 
 EBIRD_API_KEY = os.environ["EBIRD_API_KEY"]
+OSRM_BASE_URL = os.environ.get("OSRM_BASE_URL", "http://localhost:5000")
 
 app = FastAPI(title="Fledgling")
 
@@ -150,12 +151,39 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+# North America bounding boxes for the self-hosted OSRM instance's coverage,
+# derived from the Geofabrik north-america-latest .poly extent (fetched
+# 2026-09-02). Covers CONUS, Alaska (mainland), Hawaii, Puerto Rico, Canada,
+# and Mexico. Known gaps, not solved here: the western Aleutian islands cross
+# the antimeridian (positive longitude past 180°) and aren't representable by
+# a plain (min_lon, max_lon) box; Greenland is present in the underlying OSM
+# extract but isn't worth a dedicated box given near-zero relevance - both
+# will 422 as out-of-region even though the graph could theoretically answer
+# them.
+_NORTH_AMERICA_BOXES = [
+    (24.5, 49.5, -125.0, -66.9),    # CONUS
+    (51.0, 71.5, -180.0, -129.0),   # Alaska (mainland)
+    (18.5, 22.5, -161.0, -154.5),   # Hawaii
+    (17.8, 18.6, -67.5, -65.2),     # Puerto Rico
+    (41.6, 83.5, -141.0, -52.6),    # Canada
+    (14.5, 32.7, -118.4, -86.7),    # Mexico
+]
+
+
+def is_in_supported_driving_region(lat: float, lon: float) -> bool:
+    """Whether (lat, lon) falls within the self-hosted OSRM instance's coverage."""
+    return any(
+        min_lat <= lat <= max_lat and min_lon <= lon <= max_lon
+        for min_lat, max_lat, min_lon, max_lon in _NORTH_AMERICA_BOXES
+    )
+
+
 def osrm_filter_hotspots(
     center_lat: float,
     center_lon: float,
     max_minutes: int,
 ) -> list[int]:
-    """Filter hotspots by driving time using the public OSRM API.
+    """Filter hotspots by driving time using a self-hosted OSRM instance.
 
     1. Load all hotspot coords from DB
     2. Pre-filter by crow-flies radius (max_minutes * 2 km)
@@ -180,7 +208,9 @@ def osrm_filter_hotspots(
     if not candidates:
         return []
 
-    # Call OSRM table API in batches of 100
+    # Call OSRM table API in batches of 100 - matches OSRM's default
+    # --max-table-size, not a coincidence. Raising this requires bumping
+    # --max-table-size on the osrm-routed command in lockstep.
     BATCH_SIZE = 100
     result_ids = []
 
@@ -191,7 +221,7 @@ def osrm_filter_hotspots(
             coords_str += f";{lon},{lat}"
 
         url = (
-            f"https://router.project-osrm.org/table/v1/driving/{coords_str}"
+            f"{OSRM_BASE_URL}/table/v1/driving/{coords_str}"
             f"?sources=0&annotations=duration"
         )
         req = Request(url, headers={"User-Agent": "Fledgling/1.0"})
@@ -228,6 +258,12 @@ def run_optimization(req: OptimizeRequest):
         and req.center_lon is not None
         and req.max_driving_minutes is not None
     ):
+        if not is_in_supported_driving_region(req.center_lat, req.center_lon):
+            raise HTTPException(
+                status_code=422,
+                detail="Driving-time filtering isn't supported for this location yet "
+                       "(currently limited to North America).",
+            )
         locality_ids = osrm_filter_hotspots(req.center_lat, req.center_lon, req.max_driving_minutes)
         if not locality_ids:
             return {
