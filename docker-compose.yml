@@ -15,7 +15,17 @@ services:
   osrm:
     image: ghcr.io/project-osrm/osrm-backend:v26.9.0-debian
     restart: unless-stopped
-    command: osrm-routed --algorithm mld /data/north-america-latest.osrm
+    # --mmap is required, not optional: the graph (~61GB of required files) is
+    # far larger than the VPS's RAM, so osrm-routed must page it in from disk
+    # via mmap rather than loading it fully into memory - without this flag it
+    # fails to start at all (std::bad_alloc). --max-table-size raises the
+    # per-request destination cap from OSRM's default of 100 (a limit
+    # inherited from the days this called the public demo API, not a real
+    # constraint now that we self-host) - 1000 was chosen from a timing sweep
+    # against the real production graph: keeps per-destination cost low while
+    # keeping worst-case single-batch latency in the single-digit seconds even
+    # cache-cold. Keep BATCH_SIZE in api.py in lockstep with this value.
+    command: osrm-routed --algorithm mld --mmap --max-table-size 1000 /data/north-america-latest.osrm
     volumes:
       - ./data/osrm:/data:ro
     expose:

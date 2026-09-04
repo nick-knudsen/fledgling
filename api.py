@@ -208,10 +208,13 @@ def osrm_filter_hotspots(
     if not candidates:
         return []
 
-    # Call OSRM table API in batches of 100 - matches OSRM's default
-    # --max-table-size, not a coincidence. Raising this requires bumping
-    # --max-table-size on the osrm-routed command in lockstep.
-    BATCH_SIZE = 100
+    # Call OSRM table API in batches of 1000 - matches the --max-table-size
+    # configured on the osrm-routed command in docker-compose.yml (chosen from
+    # a timing sweep against the production graph: good per-destination
+    # efficiency without single-batch latency ballooning). Keep these two
+    # values in lockstep - raising one without the other either wastes the
+    # larger cap or gets requests rejected by the server.
+    BATCH_SIZE = 1000
     result_ids = []
 
     for i in range(0, len(candidates), BATCH_SIZE):
