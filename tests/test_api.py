@@ -134,6 +134,65 @@ def test_optimize_partial_driving_filter_fields_are_ignored(client, monkeypatch)
     assert [h["locality_id"] for h in resp.json()["hotspots"]] == [1, 2, 3]
 
 
+def test_optimize_out_of_region_center_is_422(client, monkeypatch):
+    called = False
+
+    def fail_if_called(*a, **kw):
+        nonlocal called
+        called = True
+        return []
+
+    monkeypatch.setattr(api, "osrm_filter_hotspots", fail_if_called)
+    resp = client.post(
+        "/api/optimize",
+        json={
+            "life_list": [], "start_date": "2023-04-10", "end_date": "2023-04-10", "k": 5,
+            "center_lat": 51.5, "center_lon": -0.1, "max_driving_minutes": 30,  # London
+        },
+    )
+    assert resp.status_code == 422
+    assert not called
+
+
+# --- is_in_supported_driving_region -----------------------------------------
+
+
+def test_region_check_accepts_conus():
+    assert api.is_in_supported_driving_region(41.0, -71.0)  # Rhode Island
+
+
+def test_region_check_accepts_alaska():
+    assert api.is_in_supported_driving_region(61.2, -149.9)  # Anchorage
+
+
+def test_region_check_accepts_hawaii():
+    assert api.is_in_supported_driving_region(21.3, -157.9)  # Honolulu
+
+
+def test_region_check_accepts_puerto_rico():
+    assert api.is_in_supported_driving_region(18.4, -66.1)  # San Juan
+
+
+def test_region_check_accepts_canada():
+    assert api.is_in_supported_driving_region(43.7, -79.4)  # Toronto
+
+
+def test_region_check_accepts_mexico():
+    assert api.is_in_supported_driving_region(19.4, -99.1)  # Mexico City
+
+
+def test_region_check_rejects_outside_north_america():
+    assert not api.is_in_supported_driving_region(40.4, -3.7)  # Madrid
+
+
+def test_region_check_rejects_western_aleutians():
+    # Known limitation: a plain (min_lon, max_lon) box can't represent the
+    # western Aleutians without antimeridian-wraparound logic (they sit at
+    # positive longitude past 180deg). If this ever starts passing, update
+    # the comment on _NORTH_AMERICA_BOXES - it means the gap got fixed.
+    assert not api.is_in_supported_driving_region(52.9, 173.2)  # Attu Island
+
+
 # --- /api/search-hotspots --------------------------------------------------
 
 

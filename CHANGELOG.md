@@ -6,6 +6,12 @@ entries are grouped as `Added`, `Changed`, `Fixed`, or `Removed`.
 Fledgling deploys continuously rather than cutting versioned releases, so entries below are grouped by date instead of a version number.
 
 
+## 2026-09-02
+
+### Changed
+- Driving-time filtering now uses a self-hosted OSRM instance scoped to North America, instead of the public OSRM demo API.
+- A search center outside that coverage now returns a 422 instead of silently degrading to zero results.
+
 ## 2026-08-30
 
 ### Added
