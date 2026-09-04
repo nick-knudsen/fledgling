@@ -13,7 +13,7 @@ services:
       - osrm
 
   osrm:
-    image: ghcr.io/project-osrm/osrm-backend:v26.9.0
+    image: ghcr.io/project-osrm/osrm-backend:v26.9.0-debian
     restart: unless-stopped
     command: osrm-routed --algorithm mld /data/north-america-latest.osrm
     volumes:
