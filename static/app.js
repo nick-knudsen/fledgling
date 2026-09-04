@@ -408,18 +408,23 @@ let lifelistSource = "fresh"; // "upload" or "fresh"
 
 function updateOptimizeBtn() {
     const btn = document.getElementById("optimize-btn");
-    if (searchMode === "driving") {
-        btn.disabled = true;
-        btn.textContent = "Driving Time search coming soon";
-    } else if (targetMode === "search") {
-        btn.disabled = selectedSpeciesList.length === 0;
-        btn.textContent = "Find Hotspots";
+    btn.textContent = "Find Hotspots";
+
+    let targetsOk;
+    if (targetMode === "search") {
+        targetsOk = selectedSpeciesList.length > 0;
     } else if (lifelistSource === "fresh") {
-        btn.disabled = false;
-        btn.textContent = "Find Hotspots";
+        targetsOk = true;
     } else {
-        btn.disabled = allObservations.length === 0;
-        btn.textContent = "Find Hotspots";
+        targetsOk = allObservations.length > 0;
+    }
+
+    if (searchMode === "driving") {
+        const maxMin = parseInt(document.getElementById("max-driving-minutes").value);
+        const drivingOk = centerLat != null && centerLon != null && maxMin > 0;
+        btn.disabled = !(targetsOk && drivingOk);
+    } else {
+        btn.disabled = !targetsOk;
     }
 }
 
@@ -1117,10 +1122,12 @@ function addScrollWheel(id, min, max) {
         const delta = e.deltaY < 0 ? step : -step;
         const current = parseInt(input.value) || 0;
         input.value = Math.max(min, Math.min(max, current + delta));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
     });
 }
 addScrollWheel("max-driving-minutes", 1, 480);
 addScrollWheel("k-input", 1, 20);
+document.getElementById("max-driving-minutes").addEventListener("input", updateOptimizeBtn);
 
 locationInput.addEventListener("blur", () => {
     locationDropdown.scrollTop = 0;
